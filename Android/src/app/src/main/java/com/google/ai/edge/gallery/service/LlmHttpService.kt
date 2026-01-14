@@ -166,7 +166,7 @@ class LlmHttpService : Service() {
         )
         return okJsonText(json.encodeToString(fallback))
       }
-      val text = runLlm(prompt, timeoutSeconds = 30) ?: return badRequest("llm error")
+      val text = runLlm(prompt, timeoutSeconds = 45) ?: return badRequest("llm error")
 
       val resp = ChatResponse(
         id = "chatcmpl-local",
@@ -198,7 +198,7 @@ class LlmHttpService : Service() {
       val text = if (prompt.isBlank()) {
         "Hola desde Edge (fallback)"
       } else {
-        runLlm(prompt, timeoutSeconds = 30) ?: "Hola desde Edge (timeout)"
+        runLlm(prompt, timeoutSeconds = 45) ?: "Hola desde Edge (timeout)"
       }
 
       val respBody = ResponsesResponse(
