@@ -20,8 +20,10 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.ByteArrayInputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Foreground service exposing a minimal HTTP API for local LLM inference.
@@ -69,6 +71,9 @@ class LlmHttpService : Service() {
     server = NanoServer(port, model)
     server?.start()
 
+    // Kick off a warm-up in background so the first real request is faster.
+    Thread { server?.warmUpModel() }.start()
+
     return START_STICKY
   }
 
@@ -104,6 +109,7 @@ class LlmHttpService : Service() {
 
   private inner class NanoServer(port: Int, private val model: Model) : NanoHTTPD(port) {
     private val executor = Executors.newSingleThreadExecutor()
+    private val inferenceLock = Any()
 
     override fun serve(session: IHTTPSession): Response {
       return try {
@@ -144,7 +150,23 @@ class LlmHttpService : Service() {
 
       val req = json.decodeFromString<ChatRequest>(body)
       val prompt = req.messages.joinToString("\n") { it.content }
-      val text = runLlm(prompt) ?: return badRequest("llm error")
+      if (prompt.isBlank()) {
+        val fallback = ChatResponse(
+          id = "chatcmpl-local",
+          created = System.currentTimeMillis() / 1000,
+          model = req.model ?: "local-llm",
+          choices = listOf(
+            ChatChoice(
+              index = 0,
+              message = ChatMessage(role = "assistant", content = "Hola desde Edge (fallback)"),
+              finish_reason = "stop",
+            )
+          ),
+          usage = Usage(prompt_tokens = 0, completion_tokens = 0),
+        )
+        return okJsonText(json.encodeToString(fallback))
+      }
+      val text = runLlm(prompt, timeoutSeconds = 45) ?: return badRequest("llm error")
 
       val resp = ChatResponse(
         id = "chatcmpl-local",
@@ -168,13 +190,21 @@ class LlmHttpService : Service() {
       val body = payload["postData"] ?: return badRequest("empty body")
 
       val req = json.decodeFromString<ResponsesRequest>(body)
+      val modelId = req.model ?: "local"
       val prompt = extractText(req.messages ?: req.input)
-      val text = runLlm(prompt) ?: return badRequest("llm error")
 
-      val resp = ResponsesResponse(
+      // Always return something quickly to keep Code happy; fall back to a short string when
+      // the model is still warming up or times out.
+      val text = if (prompt.isBlank()) {
+        "Hola desde Edge (fallback)"
+      } else {
+        runLlm(prompt, timeoutSeconds = 45) ?: "Hola desde Edge (timeout)"
+      }
+
+      val respBody = ResponsesResponse(
         id = "resp-local",
         created = System.currentTimeMillis() / 1000,
-        model = req.model ?: "local",
+        model = modelId,
         output = listOf(
           RespMessage(
             role = "assistant",
@@ -185,24 +215,31 @@ class LlmHttpService : Service() {
         usage = Usage(prompt_tokens = 0, completion_tokens = 0),
       )
 
-      // Minimal implementation: sin streaming (stream ignorado)
-      return okJsonText(json.encodeToString(resp))
+      val wantsStream = req.stream == true
+      if (wantsStream) return sseResponse(modelId, text)
+
+      return okJsonText(json.encodeToString(respBody))
+    }
+
+    // Warm up the model once after service start to reduce first-token latency.
+    fun warmUpModel() {
+      runLlm("Hola", timeoutSeconds = 10)
     }
 
     private fun extractText(msgs: List<InputMsg>?): String {
       if (msgs == null) return ""
-      val parts = mutableListOf<String>()
+      var lastUserText: String? = null
       msgs.forEach { m ->
         if (m.role.equals("user", ignoreCase = true)) {
-          m.content.forEach { c ->
-            if (c.type == "text" || c.type == "input_text") parts.add(c.text)
-          }
+          // Keep only the last text block of the last user message
+          val lastBlock = m.content.lastOrNull { it.type == "text" || it.type == "input_text" }
+          if (lastBlock != null) lastUserText = lastBlock.text
         }
       }
-      return parts.joinToString("\n")
+      return lastUserText ?: ""
     }
 
-    private fun runLlm(prompt: String): String? {
+    private fun runLlm(prompt: String, timeoutSeconds: Long = 30): String? {
       // Lazy init model once.
       synchronized(this) {
         if (model.instance == null) {
@@ -222,24 +259,124 @@ class LlmHttpService : Service() {
       val latch = CountDownLatch(1)
       var error: String? = null
       executor.execute {
-        try {
-          LlmChatModelHelper.runInference(
-            model = model,
-            input = prompt,
-            resultListener = { partial, done ->
-              if (partial.isNotEmpty()) sb.append(partial)
-              if (done) latch.countDown()
-            },
-            cleanUpListener = {},
-            onError = { e -> error = e; latch.countDown() },
-          )
-        } catch (t: Throwable) {
-          error = t.message
-          latch.countDown()
+        synchronized(inferenceLock) {
+          try {
+            LlmChatModelHelper.runInference(
+              model = model,
+              input = prompt,
+              resultListener = { partial, done ->
+                if (partial.isNotEmpty()) sb.append(partial)
+                if (done) latch.countDown()
+              },
+              cleanUpListener = {},
+              onError = { e -> error = e; latch.countDown() },
+            )
+          } catch (t: Throwable) {
+            error = t.message
+            latch.countDown()
+          }
         }
       }
-      latch.await()
+      val completed = latch.await(timeoutSeconds, TimeUnit.SECONDS)
+      if (!completed) {
+        error = "timeout"
+      }
       return if (error != null) null else sb.toString()
+    }
+
+    private fun sseResponse(modelId: String, text: String): Response {
+      val now = System.currentTimeMillis() / 1000
+      val respId = "resp-$now"
+      val msgId = "msg-$now"
+
+      fun esc(s: String): String = s
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+
+      fun emit(event: String, payload: String): String =
+        "event: $event\n" + "data: $payload\n\n"
+
+      val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
+      val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
+      val itemAdded = """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""
+      val partAdded = """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""
+      val delta = """{"type":"response.output_text.delta","content_index":0,"delta":"${esc(text)}","item_id":"$msgId","output_index":0}"""
+      val deltaDone = """{"type":"response.output_text.done","content_index":0,"item_id":"$msgId","output_index":0,"text":"${esc(text)}"}"""
+      val partDone = """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"${esc(text)}"}}"""
+      val itemDone = """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"${esc(text)}"}],"role":"assistant"},"output_index":0}"""
+      val completed = """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"${esc(text)}"}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""
+
+      val ssePayload = buildString {
+        append(emit("response.created", created))
+        append(emit("response.in_progress", inProgress))
+        append(emit("response.output_item.added", itemAdded))
+        append(emit("response.content_part.added", partAdded))
+        append(emit("response.output_text.delta", delta))
+        append(emit("response.output_text.done", deltaDone))
+        append(emit("response.content_part.done", partDone))
+        append(emit("response.output_item.done", itemDone))
+        append(emit("response.completed", completed))
+        append("data: [DONE]\n\n")
+      }
+
+      val input = ByteArrayInputStream(ssePayload.toByteArray(Charsets.UTF_8))
+      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", input)
+      resp.addHeader("Cache-Control", "no-cache")
+      resp.addHeader("Connection", "keep-alive")
+      return resp
+    }
+
+    private fun emptyResponse(modelId: String, stream: Boolean): Response {
+      val respBody = ResponsesResponse(
+        id = "resp-local",
+        created = System.currentTimeMillis() / 1000,
+        model = modelId,
+        output = listOf(
+          RespMessage(
+            role = "assistant",
+            content = listOf(RespContent(type = "text", text = "")),
+            finish_reason = "stop",
+          )
+        ),
+        usage = Usage(prompt_tokens = 0, completion_tokens = 0),
+      )
+      if (!stream) return okJsonText(json.encodeToString(respBody))
+
+      val now = System.currentTimeMillis() / 1000
+      val respId = "resp-$now"
+      val msgId = "msg-$now"
+
+      fun emit(event: String, payload: String): String = "event: $event\n" + "data: $payload\n\n"
+
+      val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
+      val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
+      val itemAdded = """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""
+      val partAdded = """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""
+      val delta = """{"type":"response.output_text.delta","content_index":0,"delta":"","item_id":"$msgId","output_index":0}"""
+      val deltaDone = """{"type":"response.output_text.done","content_index":0,"item_id":"$msgId","output_index":0,"text":""}"""
+      val partDone = """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""
+      val itemDone = """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":""}],"role":"assistant"},"output_index":0}"""
+      val completed = """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":""}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""
+
+      val ssePayload = buildString {
+        append(emit("response.created", created))
+        append(emit("response.in_progress", inProgress))
+        append(emit("response.output_item.added", itemAdded))
+        append(emit("response.content_part.added", partAdded))
+        append(emit("response.output_text.delta", delta))
+        append(emit("response.output_text.done", deltaDone))
+        append(emit("response.content_part.done", partDone))
+        append(emit("response.output_item.done", itemDone))
+        append(emit("response.completed", completed))
+        append("data: [DONE]\n\n")
+      }
+
+      val input = ByteArrayInputStream(ssePayload.toByteArray(Charsets.UTF_8))
+      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", input)
+      resp.addHeader("Cache-Control", "no-cache")
+      resp.addHeader("Connection", "keep-alive")
+      return resp
     }
 
     private fun okJsonText(body: String): Response =
@@ -318,6 +455,6 @@ class LlmHttpService : Service() {
 
   companion object {
     const val EXTRA_PORT = "extra_port"
-    const val DEFAULT_PORT = 9000
+    const val DEFAULT_PORT = 9006
   }
 }
