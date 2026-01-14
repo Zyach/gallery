@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +41,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -74,6 +77,8 @@ import androidx.compose.ui.window.Dialog
 import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.proto.Theme
+import com.google.ai.edge.gallery.service.LlmHttpService
+import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import com.google.ai.edge.gallery.ui.common.tos.TosDialog
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.ThemeSettings
@@ -105,6 +110,9 @@ fun SettingsDialog(
   val focusRequester = remember { FocusRequester() }
   val interactionSource = remember { MutableInteractionSource() }
   var showTos by remember { mutableStateOf(false) }
+  val context = LocalContext.current
+  var httpEnabled by remember { mutableStateOf(LlmHttpPrefs.isEnabled(context)) }
+  var httpPortText by remember { mutableStateOf(LlmHttpPrefs.getPort(context).toString()) }
 
   Dialog(onDismissRequest = onDismissed) {
     val focusManager = LocalFocusManager.current
@@ -184,6 +192,51 @@ fun SettingsDialog(
                 )
               }
             }
+          }
+
+          // HTTP bridge toggle & port
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              Icon(Icons.Rounded.Cloud, contentDescription = null)
+              Text(
+                "Expose HTTP API",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+              )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+              androidx.compose.material3.Switch(checked = httpEnabled, onCheckedChange = { checked ->
+                httpEnabled = checked
+                val port = httpPortText.toIntOrNull() ?: LlmHttpService.DEFAULT_PORT
+                LlmHttpPrefs.save(context, checked, port)
+                if (checked) {
+                  context.startService(Intent(context, LlmHttpService::class.java).apply {
+                    putExtra(LlmHttpService.EXTRA_PORT, port)
+                  })
+                } else {
+                  context.stopService(Intent(context, LlmHttpService::class.java))
+                }
+              })
+              BasicTextField(
+                value = httpPortText,
+                onValueChange = { httpPortText = it.filter { ch -> ch.isDigit() }.take(5) },
+                textStyle = MaterialTheme.typography.bodyMedium,
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                modifier = Modifier
+                  .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                  .padding(horizontal = 10.dp, vertical = 8.dp)
+                  .widthIn(min = 80.dp)
+              )
+              Text("port", style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+              "Every Code puede llamar a http://127.0.0.1:<puerto>/generate",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
           }
 
           // HF Token management.
