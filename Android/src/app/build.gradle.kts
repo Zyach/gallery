@@ -87,7 +87,6 @@ dependencies {
   implementation(libs.androidx.lifecycle.process)
   implementation(libs.androidx.security.crypto)
   implementation(libs.androidx.webkit)
-  implementation("org.nanohttpd:nanohttpd:2.3.1")
   implementation(libs.litertlm)
   implementation(libs.commonmark)
   implementation(libs.richtext)
