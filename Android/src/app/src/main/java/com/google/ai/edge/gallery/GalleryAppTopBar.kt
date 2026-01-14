@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +55,7 @@ fun GalleryTopAppBar(
   modifier: Modifier = Modifier,
   leftAction: AppBarAction? = null,
   rightAction: AppBarAction? = null,
+  secondaryRightAction: AppBarAction? = null,
   scrollBehavior: TopAppBarScrollBehavior? = null,
   subtitle: String = "",
 ) {
@@ -110,24 +112,37 @@ fun GalleryTopAppBar(
     },
     // The "action" component at the right.
     actions = {
-      when (rightAction?.actionType) {
-        // Click an icon to open "app setting".
-        AppBarActionType.APP_SETTING -> {
-          IconButton(onClick = rightAction.actionFn) {
-            Icon(
-              imageVector = Icons.Rounded.Settings,
-              contentDescription = stringResource(R.string.cd_app_settings_icon),
-              tint = MaterialTheme.colorScheme.onSurface,
-            )
+      val actions = listOfNotNull(secondaryRightAction, rightAction)
+      for (action in actions) {
+        when (action.actionType) {
+          // Click an icon to open "app setting".
+          AppBarActionType.APP_SETTING -> {
+            IconButton(onClick = action.actionFn) {
+              Icon(
+                imageVector = Icons.Rounded.Settings,
+                contentDescription = stringResource(R.string.cd_app_settings_icon),
+                tint = MaterialTheme.colorScheme.onSurface,
+              )
+            }
           }
-        }
 
-        // Click a button to navigate up.
-        AppBarActionType.NAVIGATE_UP -> {
-          TextButton(onClick = rightAction.actionFn) { Text("Done") }
-        }
+          AppBarActionType.CHAT_HISTORY -> {
+            IconButton(onClick = action.actionFn) {
+              Icon(
+                imageVector = Icons.Rounded.History,
+                contentDescription = stringResource(R.string.cd_chat_history_icon),
+                tint = MaterialTheme.colorScheme.onSurface,
+              )
+            }
+          }
 
-        else -> {}
+          // Click a button to navigate up.
+          AppBarActionType.NAVIGATE_UP -> {
+            TextButton(onClick = action.actionFn) { Text("Done") }
+          }
+
+          else -> {}
+        }
       }
     },
   )

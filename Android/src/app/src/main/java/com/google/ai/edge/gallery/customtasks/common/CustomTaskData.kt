@@ -43,4 +43,5 @@ data class CustomTaskData(
 data class CustomTaskDataForBuiltinTask(
   val modelManagerViewModel: ModelManagerViewModel,
   val onNavUp: () -> Unit,
+  val sessionId: String? = null,
 )

@@ -18,11 +18,15 @@ package com.google.ai.edge.gallery.ui.llmchat
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.chathistory.ChatHistoryRepository
+import com.google.ai.edge.gallery.data.chathistory.ChatMessageWithAttachments
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageBenchmarkLlmResult
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageError
@@ -38,6 +42,7 @@ import com.google.ai.edge.litertlm.ExperimentalApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -50,7 +55,109 @@ private val STATS =
     Stat(id = "latency", label = "Latency", unit = "sec"),
   )
 
-open class LlmChatViewModelBase() : ChatViewModel() {
+open class LlmChatViewModelBase(private val chatHistoryRepository: ChatHistoryRepository) :
+  ChatViewModel() {
+  private var currentSessionId: String? = null
+  private var loadSessionJob: Job? = null
+
+  fun initializeSession(model: Model, taskId: String, sessionId: String?, defaultTitle: String) {
+    loadSessionJob?.cancel()
+    loadSessionJob =
+      viewModelScope.launch(Dispatchers.Default) {
+        val resolvedSessionId =
+          if (sessionId != null && chatHistoryRepository.getSession(sessionId) != null) {
+            sessionId
+          } else {
+            chatHistoryRepository.createSession(taskId, model.name, defaultTitle).id
+          }
+        currentSessionId = resolvedSessionId
+        loadSessionMessages(model, resolvedSessionId)
+      }
+  }
+
+  fun persistMessages(messages: List<com.google.ai.edge.gallery.ui.common.chat.ChatMessage>) {
+    val sessionId = currentSessionId ?: return
+    if (messages.isEmpty()) {
+      return
+    }
+    viewModelScope.launch(Dispatchers.Default) {
+      chatHistoryRepository.appendMessages(sessionId, messages)
+    }
+  }
+
+  fun getCurrentSessionId(): String? = currentSessionId
+
+  private suspend fun loadSessionMessages(model: Model, sessionId: String) {
+    val storedMessages = chatHistoryRepository.getMessagesWithAttachmentsOnce(sessionId)
+    val mapped = storedMessages.mapNotNull { mapStoredMessage(it) }
+    setMessages(model = model, messages = mapped)
+  }
+
+  private fun mapStoredMessage(stored: ChatMessageWithAttachments): com.google.ai.edge.gallery.ui.common.chat.ChatMessage? {
+    val message = stored.message
+    val side = ChatSide.valueOf(message.side)
+    return when (message.type) {
+      ChatMessageType.TEXT.name ->
+        ChatMessageText(
+          content = message.content,
+          side = side,
+          latencyMs = message.latencyMs,
+          accelerator = message.accelerator,
+        )
+      ChatMessageType.INFO.name -> com.google.ai.edge.gallery.ui.common.chat.ChatMessageInfo(message.content)
+      ChatMessageType.WARNING.name ->
+        ChatMessageWarning(message.content)
+      ChatMessageType.ERROR.name -> ChatMessageError(message.content)
+      ChatMessageType.IMAGE.name, ChatMessageType.IMAGE_WITH_HISTORY.name -> {
+        val bitmaps = stored.attachments.mapNotNull { attachment ->
+          try {
+            val bytes = chatHistoryRepository.readAttachmentBytes(attachment.uri)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+          } catch (e: Exception) {
+            Log.e(TAG, "Failed to decode stored image", e)
+            null
+          }
+        }
+        if (bitmaps.isEmpty()) {
+          null
+        } else {
+          val imageBitmaps = bitmaps.map { it.asImageBitmap() }
+          com.google.ai.edge.gallery.ui.common.chat.ChatMessageImage(
+            bitmaps = bitmaps,
+            imageBitMaps = imageBitmaps,
+            side = side,
+            latencyMs = message.latencyMs,
+          )
+        }
+      }
+      ChatMessageType.AUDIO_CLIP.name -> {
+        val attachment = stored.attachments.firstOrNull() ?: return null
+        try {
+          val bytes = chatHistoryRepository.readAttachmentBytes(attachment.uri)
+          ChatMessageAudioClip(
+            audioData = bytes,
+            sampleRate = attachment.sampleRate,
+            side = side,
+            latencyMs = message.latencyMs,
+          )
+        } catch (e: Exception) {
+          Log.e(TAG, "Failed to decode stored audio", e)
+          null
+        }
+      }
+      else -> {
+        if (message.content.isBlank()) null
+        else
+          ChatMessageText(
+            content = message.content,
+            side = side,
+            latencyMs = message.latencyMs,
+            accelerator = message.accelerator,
+          )
+      }
+    }
+  }
+
   fun generateResponse(
     model: Model,
     input: String,
@@ -136,6 +243,7 @@ open class LlmChatViewModelBase() : ChatViewModel() {
 
             if (done) {
               setInProgress(false)
+              getLastMessage(model = model)?.let { persistMessages(listOf(it)) }
 
               decodeSpeed = decodeTokens / ((curTs - firstTokenTs) / 1000f)
               if (decodeSpeed.isNaN()) {
@@ -199,6 +307,8 @@ open class LlmChatViewModelBase() : ChatViewModel() {
       setIsResettingSession(true)
       clearAllMessages(model = model)
       stopResponse(model = model)
+      currentSessionId =
+        chatHistoryRepository.createSession(task.id, model.name, task.label).id
 
       while (true) {
         try {
@@ -232,6 +342,7 @@ open class LlmChatViewModelBase() : ChatViewModel() {
 
       // Clone the clicked message and add it.
       addMessage(model = model, message = message.clone())
+      persistMessages(listOf(message))
 
       // Run inference.
       generateResponse(model = model, input = message.content, onError = onError)
@@ -273,8 +384,14 @@ open class LlmChatViewModelBase() : ChatViewModel() {
   }
 }
 
-@HiltViewModel class LlmChatViewModel @Inject constructor() : LlmChatViewModelBase()
+@HiltViewModel
+class LlmChatViewModel @Inject constructor(chatHistoryRepository: ChatHistoryRepository) :
+  LlmChatViewModelBase(chatHistoryRepository)
 
-@HiltViewModel class LlmAskImageViewModel @Inject constructor() : LlmChatViewModelBase()
+@HiltViewModel
+class LlmAskImageViewModel @Inject constructor(chatHistoryRepository: ChatHistoryRepository) :
+  LlmChatViewModelBase(chatHistoryRepository)
 
-@HiltViewModel class LlmAskAudioViewModel @Inject constructor() : LlmChatViewModelBase()
+@HiltViewModel
+class LlmAskAudioViewModel @Inject constructor(chatHistoryRepository: ChatHistoryRepository) :
+  LlmChatViewModelBase(chatHistoryRepository)

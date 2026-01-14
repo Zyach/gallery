@@ -46,6 +46,19 @@
   <string name="confirm_delete_model_dialog_content" translatable="false">Are you sure you want to delete the downloaded model \"%s\"?</string>
   <string name="conversation_reset_message" translatable="false">Conversation was reset</string>
   <string name="engin_reset_message" translatable="false">Engine was reset</string>
+  <string name="chat_history_title" translatable="false">Chat History</string>
+  <string name="chat_history_export" translatable="false">Export</string>
+  <string name="chat_history_import" translatable="false">Import</string>
+  <string name="chat_history_clear_all" translatable="false">Clear all</string>
+  <string name="chat_history_clear_all_title" translatable="false">Clear all history?</string>
+  <string name="chat_history_clear_all_body" translatable="false">This will remove all stored chat history and attachments.</string>
+  <string name="chat_history_clear_all_confirm" translatable="false">Clear all</string>
+  <string name="chat_history_clear_all_cancel" translatable="false">Cancel</string>
+  <string name="chat_history_empty" translatable="false">No chat history yet.</string>
+  <string name="chat_history_working" translatable="false">Working…</string>
+  <string name="chat_history_filter_task" translatable="false">Task</string>
+  <string name="chat_history_filter_model" translatable="false">Model</string>
+  <string name="chat_history_filter_all" translatable="false">All</string>
   <string name="notification_title_success" translatable="false">Model download succeeded</string>
   <string name="notification_content_success" translatable="false">Model \"%s\" has been downloaded</string>
   <string name="notification_title_fail" translatable="false">Model download failed</string>
@@ -143,6 +156,7 @@
   <string name="cd_navigate_back_icon">Go back</string>
   <!-- Content description spoken when the settings icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_app_settings_icon">Settings</string>
+  <string name="cd_chat_history_icon">Chat history</string>
   <!-- Content description spoken when the done icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_done_icon">Done</string>
   <!-- Content description spoken when the collapse icon is focused. [CHAR_LIMIT=NONE] -->
@@ -153,6 +167,7 @@
   <string name="cd_stop_icon">Stop</string>
   <!-- Content description spoken when the delete icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_delete_icon">Delete</string>
+  <string name="cd_chat_history_delete">Delete chat history session</string>
   <!-- Content description spoken when the close icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_close_icon">Close</string>
   <!-- Content description spoken when the selected icon is focused. [CHAR_LIMIT=NONE] -->

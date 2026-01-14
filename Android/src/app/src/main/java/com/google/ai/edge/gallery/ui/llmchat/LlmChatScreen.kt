@@ -16,10 +16,13 @@
 
 package com.google.ai.edge.gallery.ui.llmchat
 
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.bundleOf
@@ -36,6 +39,7 @@ fun LlmChatScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
+  sessionId: String? = null,
   viewModel: LlmChatViewModel = hiltViewModel(),
 ) {
   ChatViewWrapper(
@@ -44,6 +48,7 @@ fun LlmChatScreen(
     taskId = BuiltInTaskId.LLM_CHAT,
     navigateUp = navigateUp,
     modifier = modifier,
+    sessionId = sessionId,
   )
 }
 
@@ -52,6 +57,7 @@ fun LlmAskImageScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
+  sessionId: String? = null,
   viewModel: LlmAskImageViewModel = hiltViewModel(),
 ) {
   ChatViewWrapper(
@@ -60,6 +66,7 @@ fun LlmAskImageScreen(
     taskId = BuiltInTaskId.LLM_ASK_IMAGE,
     navigateUp = navigateUp,
     modifier = modifier,
+    sessionId = sessionId,
   )
 }
 
@@ -68,6 +75,7 @@ fun LlmAskAudioScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
+  sessionId: String? = null,
   viewModel: LlmAskAudioViewModel = hiltViewModel(),
 ) {
   ChatViewWrapper(
@@ -76,6 +84,7 @@ fun LlmAskAudioScreen(
     taskId = BuiltInTaskId.LLM_ASK_AUDIO,
     navigateUp = navigateUp,
     modifier = modifier,
+    sessionId = sessionId,
   )
 }
 
@@ -86,9 +95,24 @@ fun ChatViewWrapper(
   taskId: String,
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
+  sessionId: String? = null,
 ) {
   val context = LocalContext.current
   val task = modelManagerViewModel.getTaskById(id = taskId)!!
+  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
+
+  LaunchedEffect(
+    task.id,
+    modelManagerUiState.selectedModel.name,
+    sessionId,
+  ) {
+    viewModel.initializeSession(
+      model = modelManagerUiState.selectedModel,
+      taskId = task.id,
+      sessionId = sessionId,
+      defaultTitle = task.label,
+    )
+  }
 
   ChatView(
     task = task,
@@ -98,6 +122,7 @@ fun ChatViewWrapper(
       for (message in messages) {
         viewModel.addMessage(model = model, message = message)
       }
+      viewModel.persistMessages(messages)
 
       var text = ""
       val images: MutableList<Bitmap> = mutableListOf()

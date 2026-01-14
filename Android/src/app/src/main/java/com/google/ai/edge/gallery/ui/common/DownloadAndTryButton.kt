@@ -131,6 +131,7 @@ fun DownloadAndTryButton(
   var checkingToken by remember { mutableStateOf(false) }
   var showAgreementAckSheet by remember { mutableStateOf(false) }
   var showErrorDialog by remember { mutableStateOf(false) }
+  var authConfigError by remember { mutableStateOf<String?>(null) }
   var showMemoryWarning by remember { mutableStateOf(false) }
   var downloadStarted by remember { mutableStateOf(false) }
   val sheetState = rememberModalBottomSheetState()
@@ -232,9 +233,16 @@ fun DownloadAndTryButton(
 
   // Function to kick off the authentication and token exchange flow.
   val startTokenExchange = {
-    val authRequest = modelManagerViewModel.getAuthorizationRequest()
-    val authIntent = modelManagerViewModel.authService.getAuthorizationRequestIntent(authRequest)
-    authResultLauncher.launch(authIntent)
+    val configError = modelManagerViewModel.validateAuthConfig()
+    if (configError != null) {
+      authConfigError = configError
+      checkingToken = false
+      downloadStarted = false
+    } else {
+      val authRequest = modelManagerViewModel.getAuthorizationRequest()
+      val authIntent = modelManagerViewModel.authService.getAuthorizationRequestIntent(authRequest)
+      authResultLauncher.launch(authIntent)
+    }
   }
 
   // Launches a coroutine to handle the initial check and potential authentication flow
@@ -513,6 +521,24 @@ fun DownloadAndTryButton(
       text = { Text("Please check your internet connection.") },
       onDismissRequest = { showErrorDialog = false },
       confirmButton = { TextButton(onClick = { showErrorDialog = false }) { Text("Close") } },
+    )
+  }
+
+  if (authConfigError != null) {
+    AlertDialog(
+      icon = {
+        Icon(
+          Icons.Rounded.Error,
+          contentDescription = stringResource(R.string.cd_error),
+          tint = MaterialTheme.colorScheme.error,
+        )
+      },
+      title = { Text("Authentication not configured") },
+      text = { Text(authConfigError ?: "") },
+      onDismissRequest = { authConfigError = null },
+      confirmButton = {
+        TextButton(onClick = { authConfigError = null }) { Text("Close") }
+      },
     )
   }
 

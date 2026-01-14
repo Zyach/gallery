@@ -585,6 +585,19 @@ constructor(
       .build()
   }
 
+  fun validateAuthConfig(): String? {
+    if (ProjectConfig.clientId.startsWith("REPLACE_WITH")) {
+      return "Hugging Face client ID is not configured."
+    }
+    if (ProjectConfig.redirectUri.startsWith("REPLACE_WITH")) {
+      return "Hugging Face redirect URI is not configured."
+    }
+    if (!ProjectConfig.redirectUri.contains("://")) {
+      return "Hugging Face redirect URI is invalid."
+    }
+    return null
+  }
+
   fun handleAuthResult(result: ActivityResult, onTokenRequested: (TokenRequestResult) -> Unit) {
     val dataIntent = result.data
     if (dataIntent == null) {

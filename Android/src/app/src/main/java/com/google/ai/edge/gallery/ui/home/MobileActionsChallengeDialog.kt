@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -35,10 +34,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,11 +88,23 @@ fun MobileActionsChallengeDialog(
         append("1. ")
         withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) { append("On your computer") }
         append(", open ")
-        pushStringAnnotation(tag = "URL", annotation = guideUrl)
-        withStyle(style = SpanStyle(color = MaterialTheme.customColors.linkColor)) {
+        withLink(
+          link =
+            LinkAnnotation.Url(
+              url = guideUrl,
+              styles =
+                TextLinkStyles(
+                  style =
+                    SpanStyle(
+                      color = MaterialTheme.customColors.linkColor,
+                      textDecoration = TextDecoration.Underline,
+                    )
+                ),
+              linkInteractionListener = { _ -> uriHandler.openUri(guideUrl) },
+            )
+        ) {
           append("this guide")
         }
-        pop()
         append(
           "\n2. Follow the instructions to fine tune the model and convert it to .litertlm format."
         )
@@ -98,16 +113,9 @@ fun MobileActionsChallengeDialog(
         withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) { append("Load Model") }
         append(" below to unlock the demo.")
       }
-      ClickableText(
+      Text(
         text = instructions,
-        style =
-          MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-        onClick = { offset ->
-          instructions
-            .getStringAnnotations(tag = "URL", start = offset, end = offset)
-            .firstOrNull()
-            ?.let { uriHandler.openUri(it.item) }
-        },
+        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
       )
       Spacer(modifier = Modifier.height(16.dp))
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

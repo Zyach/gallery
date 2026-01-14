@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-package com.google.ai.edge.gallery.data
+package com.google.ai.edge.gallery.data.chathistory
 
-/** Possible action for app bar. */
-enum class AppBarActionType {
-  NO_ACTION,
-  APP_SETTING,
-  DOWNLOAD_MANAGER,
-  NAVIGATE_UP,
-  CHAT_HISTORY,
+import androidx.room.Database
+import androidx.room.RoomDatabase
+
+@Database(
+  entities = [ChatSessionEntity::class, ChatMessageEntity::class, ChatAttachmentEntity::class],
+  version = 1,
+  exportSchema = false,
+)
+abstract class ChatHistoryDatabase : RoomDatabase() {
+  abstract fun chatHistoryDao(): ChatHistoryDao
 }
-
-class AppBarAction(val actionType: AppBarActionType, val actionFn: () -> Unit)
