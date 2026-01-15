@@ -256,7 +256,8 @@ fun DownloadAndTryButton(
       if (needToDownloadFirst) {
         downloadStarted = true
         if (ProjectConfig.skipAuthForHfDownloads) {
-          withContext(Dispatchers.Main) { startDownload(null) }
+          val token = ProjectConfig.hfAccessToken.takeIf { it.isNotBlank() }
+          withContext(Dispatchers.Main) { startDownload(token) }
           return@launch
         }
         // For HuggingFace urls

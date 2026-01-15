@@ -23,6 +23,10 @@ object ProjectConfig {
   // Set to true to bypass Hugging Face OAuth checks and attempt direct downloads.
   const val skipAuthForHfDownloads = true
 
+  // Optional: static Hugging Face access token used when skipAuthForHfDownloads is true.
+  // Leave blank to attempt anonymous; fill with a personal token (e.g., hf_...) for private models.
+  const val hfAccessToken: String = ""
+
   // Hugging Face Client ID.
   //
   const val clientId = "REPLACE_WITH_YOUR_CLIENT_ID_IN_HUGGINGFACE_APP"
