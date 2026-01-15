@@ -7,12 +7,6 @@
 
 The Google AI Edge Gallery is an experimental app that puts the power of cutting-edge Generative AI models directly into your hands, running entirely on your Android *(available now)* and iOS *(available now via TestFlight)* devices. Dive into a world of creative and practical AI use cases, all running locally, without needing an internet connection once the model is loaded. Experiment with different models, chat, ask questions with images and audio clip, explore prompts, and more!
 
-Install the app today from Google Play
-
-<a href='https://play.google.com/store/apps/details?id=com.google.ai.edge.gallery'><img alt='Get it on Google Play' width="250" src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/></a>
-
-For users without Google Play access, install the apk from the [**latest release**](https://github.com/google-ai-edge/gallery/releases/latest/)
-
 > [!IMPORTANT]
 > You must uninstall all previous versions of the app before installing this one. Past versions will no longer be working and supported.
 
@@ -89,3 +83,10 @@ Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file 
 *   [LLM Inference guide for Android](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android)
 *   [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM)
 *   [Google AI Edge Documentation](https://ai.google.dev/edge)
+
+---
+
+## Changes made in this fork
+
+*   Add option to expose HTTP API to allow Every Code calls
+*   First steps to implement chat history support [in process]
