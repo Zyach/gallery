@@ -20,23 +20,18 @@ import androidx.core.net.toUri
 import net.openid.appauth.AuthorizationServiceConfiguration
 
 object ProjectConfig {
-  // Set to true to bypass Hugging Face OAuth checks and attempt direct downloads.
-  const val skipAuthForHfDownloads = true
+  // Set to false to use the official Hugging Face OAuth flow.
+  const val skipAuthForHfDownloads = false
 
-  // Optional: static Hugging Face access token used when skipAuthForHfDownloads is true.
-  // Leave blank to attempt anonymous; fill with a personal token (e.g., hf_...) for private models.
+  // Optional: static Hugging Face access token if you choose to bypass OAuth.
   const val hfAccessToken: String = ""
 
   // Hugging Face Client ID.
-  //
-  const val clientId = "REPLACE_WITH_YOUR_CLIENT_ID_IN_HUGGINGFACE_APP"
+  const val clientId = "5f369176-ad7f-4e53-bca6-b4cc65cbfee2"
 
-  // Registered redirect URI.
-  //
-  // The scheme needs to match the
-  // "android.defaultConfig.manifestPlaceholders["appAuthRedirectScheme"]" field in
-  // "build.gradle.kts".
-  const val redirectUri = "REPLACE_WITH_YOUR_REDIRECT_URI_IN_HUGGINGFACE_APP"
+  // Registered redirect URI (must match Hugging Face app settings and manifest placeholder).
+  // Note: AppAuth requires a well-formed URI. Use scheme://path (two slashes).
+  const val redirectUri = "com.google.aiedge.mygallery://oauth2redirect"
 
   // OAuth 2.0 Endpoints (Authorization + Token Exchange)
   private const val authEndpoint = "https://huggingface.co/oauth/authorize"

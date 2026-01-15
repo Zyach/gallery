@@ -193,13 +193,11 @@ class LlmHttpService : Service() {
       val modelId = req.model ?: "local"
       val prompt = extractText(req.messages ?: req.input)
 
-      // Always return something quickly to keep Code happy; fall back to a short string when
-      // the model is still warming up or times out.
-      val text = if (prompt.isBlank()) {
-        "Hola desde Edge (fallback)"
-      } else {
-        runLlm(prompt, timeoutSeconds = 30) ?: "Hola desde Edge (timeout)"
+      if (prompt.isBlank()) {
+        return emptyResponse(modelId, stream = req.stream == true)
       }
+
+      val text = runLlm(prompt, timeoutSeconds = 90) ?: return badRequest("llm error")
 
       val respBody = ResponsesResponse(
         id = "resp-local",
