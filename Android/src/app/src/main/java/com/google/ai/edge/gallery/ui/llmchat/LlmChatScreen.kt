@@ -148,6 +148,10 @@ fun ChatViewWrapper(
       sessionId = sessionId,
       defaultTitle = task.label,
     )
+    // Defensive: ensure messages load even if first init ran with stale model before selection.
+    if (!sessionId.isNullOrBlank()) {
+      viewModel.reloadCurrentSessionMessages(modelManagerUiState.selectedModel)
+    }
     if (!missingModelNoticeShown && !pendingMissingModelNotice.isNullOrBlank()) {
       viewModel.addMessage(
         model = modelManagerUiState.selectedModel,

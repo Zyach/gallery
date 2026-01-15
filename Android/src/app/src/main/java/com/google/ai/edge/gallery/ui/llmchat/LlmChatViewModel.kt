@@ -88,6 +88,13 @@ open class LlmChatViewModelBase(private val chatHistoryRepository: ChatHistoryRe
 
   fun getCurrentSessionId(): String? = currentSessionId
 
+  fun reloadCurrentSessionMessages(model: Model) {
+    val sessionId = currentSessionId ?: return
+    viewModelScope.launch(Dispatchers.Default) {
+      loadSessionMessages(model, sessionId)
+    }
+  }
+
   suspend fun getSessionInfo(sessionId: String): ChatSessionEntity? {
     return chatHistoryRepository.getSession(sessionId)
   }
