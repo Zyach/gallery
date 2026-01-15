@@ -86,7 +86,7 @@ Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file 
 
 ---
 
-## Changes made in this fork
+## ✨ Changes made in this fork
 
 *   Add option to expose HTTP API to allow Every Code calls
 *   First steps to implement chat history support [in process]
