@@ -20,6 +20,9 @@ import androidx.core.net.toUri
 import net.openid.appauth.AuthorizationServiceConfiguration
 
 object ProjectConfig {
+  // Set to true to bypass Hugging Face OAuth checks and attempt direct downloads.
+  const val skipAuthForHfDownloads = true
+
   // Hugging Face Client ID.
   //
   const val clientId = "REPLACE_WITH_YOUR_CLIENT_ID_IN_HUGGINGFACE_APP"

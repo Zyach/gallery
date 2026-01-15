@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.ui.common
 
 import android.content.Intent
 import android.util.Log
+import com.google.ai.edge.gallery.common.ProjectConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -254,6 +255,10 @@ fun DownloadAndTryButton(
     scope.launch(Dispatchers.IO) {
       if (needToDownloadFirst) {
         downloadStarted = true
+        if (ProjectConfig.skipAuthForHfDownloads) {
+          withContext(Dispatchers.Main) { startDownload(null) }
+          return@launch
+        }
         // For HuggingFace urls
         if (model.url.startsWith("https://huggingface.co")) {
           checkingToken = true
