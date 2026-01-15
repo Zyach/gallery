@@ -27,6 +27,7 @@ import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.chathistory.ChatHistoryRepository
 import com.google.ai.edge.gallery.data.chathistory.ChatMessageWithAttachments
+import com.google.ai.edge.gallery.data.chathistory.ChatSessionEntity
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageBenchmarkLlmResult
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageError
@@ -86,6 +87,10 @@ open class LlmChatViewModelBase(private val chatHistoryRepository: ChatHistoryRe
   }
 
   fun getCurrentSessionId(): String? = currentSessionId
+
+  suspend fun getSessionInfo(sessionId: String): ChatSessionEntity? {
+    return chatHistoryRepository.getSession(sessionId)
+  }
 
   private suspend fun loadSessionMessages(model: Model, sessionId: String) {
     val storedMessages = chatHistoryRepository.getMessagesWithAttachmentsOnce(sessionId)

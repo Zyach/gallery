@@ -23,15 +23,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.bundleOf
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.MaterialTheme
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageImage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatView
+import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 
 @Composable
@@ -100,6 +108,34 @@ fun ChatViewWrapper(
   val context = LocalContext.current
   val task = modelManagerViewModel.getTaskById(id = taskId)!!
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
+  var pendingMissingModelNotice by remember { mutableStateOf<String?>(null) }
+  var missingModelNoticeShown by remember { mutableStateOf(false) }
+  var showMissingModelDialog by remember { mutableStateOf(false) }
+
+  LaunchedEffect(sessionId) {
+    if (sessionId.isNullOrBlank()) {
+      pendingMissingModelNotice = null
+      missingModelNoticeShown = false
+      showMissingModelDialog = false
+      return@LaunchedEffect
+    }
+    val session = viewModel.getSessionInfo(sessionId)
+    if (session != null) {
+      val targetModel = modelManagerViewModel.getModelByName(session.modelName)
+      if (targetModel != null) {
+        pendingMissingModelNotice = null
+        missingModelNoticeShown = false
+        showMissingModelDialog = false
+        if (targetModel.name != modelManagerUiState.selectedModel.name) {
+          modelManagerViewModel.selectModel(targetModel)
+        }
+      } else {
+        pendingMissingModelNotice =
+          "Model '${session.modelName}' is not available. Showing history only."
+        showMissingModelDialog = true
+      }
+    }
+  }
 
   LaunchedEffect(
     task.id,
@@ -112,6 +148,13 @@ fun ChatViewWrapper(
       sessionId = sessionId,
       defaultTitle = task.label,
     )
+    if (!missingModelNoticeShown && !pendingMissingModelNotice.isNullOrBlank()) {
+      viewModel.addMessage(
+        model = modelManagerUiState.selectedModel,
+        message = ChatMessageWarning(content = pendingMissingModelNotice ?: ""),
+      )
+      missingModelNoticeShown = true
+    }
   }
 
   ChatView(
@@ -186,4 +229,20 @@ fun ChatViewWrapper(
     navigateUp = navigateUp,
     modifier = modifier,
   )
+
+  if (showMissingModelDialog && !pendingMissingModelNotice.isNullOrBlank()) {
+    AlertDialog(
+      onDismissRequest = { showMissingModelDialog = false },
+      title = { Text("Model not available") },
+      text = {
+        Text(
+          pendingMissingModelNotice ?: "",
+          style = MaterialTheme.typography.bodyMedium,
+        )
+      },
+      confirmButton = {
+        TextButton(onClick = { showMissingModelDialog = false }) { Text("OK") }
+      },
+    )
+  }
 }
