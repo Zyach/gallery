@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -132,6 +133,7 @@ fun DownloadAndTryButton(
   var checkingToken by remember { mutableStateOf(false) }
   var showAgreementAckSheet by remember { mutableStateOf(false) }
   var showErrorDialog by remember { mutableStateOf(false) }
+  var showTokenRequiredDialog by remember { mutableStateOf(false) }
   var authConfigError by remember { mutableStateOf<String?>(null) }
   var showMemoryWarning by remember { mutableStateOf(false) }
   var downloadStarted by remember { mutableStateOf(false) }
@@ -256,8 +258,24 @@ fun DownloadAndTryButton(
       if (needToDownloadFirst) {
         downloadStarted = true
         if (ProjectConfig.skipAuthForHfDownloads) {
-          val token = ProjectConfig.hfAccessToken.takeIf { it.isNotBlank() }
-          withContext(Dispatchers.Main) { startDownload(token) }
+          val tokenStatusAndData = modelManagerViewModel.getTokenStatusAndData()
+          val tokenFromStore =
+            if (tokenStatusAndData.status == TokenStatus.NOT_EXPIRED)
+              tokenStatusAndData.data?.accessToken
+            else null
+
+          val token =
+            tokenFromStore ?: ProjectConfig.hfAccessToken.takeIf { it.isNotBlank() }
+
+          if (token != null) {
+            withContext(Dispatchers.Main) { startDownload(token) }
+          } else {
+            withContext(Dispatchers.Main) {
+              checkingToken = false
+              downloadStarted = false
+              showTokenRequiredDialog = true
+            }
+          }
           return@launch
         }
         // For HuggingFace urls
@@ -555,6 +573,22 @@ fun DownloadAndTryButton(
         showMemoryWarning = false
       },
       onDismissed = { showMemoryWarning = false },
+    )
+  }
+
+  if (showTokenRequiredDialog) {
+    AlertDialog(
+      onDismissRequest = { showTokenRequiredDialog = false },
+      icon = { Icon(Icons.Rounded.Info, contentDescription = null) },
+      title = { Text("Token required") },
+      text = {
+        Text(
+          "This model needs a Hugging Face token. Open Settings → enter your token and save, then retry.",
+        )
+      },
+      confirmButton = {
+        TextButton(onClick = { showTokenRequiredDialog = false }) { Text("Got it") }
+      },
     )
   }
 }
