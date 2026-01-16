@@ -1,2 +1,4 @@
 .DS_Store
 .gradle/
+device_report.txt
+Android/src/gradle.properties
