@@ -24,24 +24,42 @@ import com.google.ai.edge.gallery.ui.theme.customColors
 
 @Composable
 fun getTaskBgColor(task: Task): Color {
-  val colorIndex: Int = task.index % MaterialTheme.customColors.taskBgColors.size
-  return MaterialTheme.customColors.taskBgColors[colorIndex]
+  val colors = MaterialTheme.customColors.taskBgColors
+  if (colors.isEmpty()) return Color.Unspecified
+  val colorIndex: Int = normalizeIndex(task.index, colors.size)
+  return colors[colorIndex]
 }
 
 @Composable
 fun getTaskBgGradientColors(task: Task): List<Color> {
-  val colorIndex: Int = task.index % MaterialTheme.customColors.taskBgColors.size
-  return MaterialTheme.customColors.taskBgGradientColors[colorIndex]
+  val gradients = MaterialTheme.customColors.taskBgGradientColors
+  if (gradients.isEmpty()) return emptyList()
+  val colorIndex: Int = normalizeIndex(task.index, gradients.size)
+  return gradients[colorIndex]
 }
 
 @Composable
 fun getTaskIconColor(task: Task): Color {
-  val colorIndex: Int = task.index % MaterialTheme.customColors.taskIconColors.size
-  return MaterialTheme.customColors.taskIconColors[colorIndex]
+  val colors = MaterialTheme.customColors.taskIconColors
+  if (colors.isEmpty()) return Color.Unspecified
+  val colorIndex: Int = normalizeIndex(task.index, colors.size)
+  return colors[colorIndex]
 }
 
 @Composable
 fun getTaskIconColor(index: Int): Color {
-  val colorIndex: Int = index % MaterialTheme.customColors.taskIconColors.size
-  return MaterialTheme.customColors.taskIconColors[colorIndex]
+  val colors = MaterialTheme.customColors.taskIconColors
+  if (colors.isEmpty()) return Color.Unspecified
+  val colorIndex: Int = normalizeIndex(index, colors.size)
+  return colors[colorIndex]
+}
+
+/**
+ * Ensures a non-negative index into cyclic color lists, even if the caller passes a negative task
+ * index.
+ */
+private fun normalizeIndex(index: Int, size: Int): Int {
+  // Kotlin `%` keeps the sign; adjust to always be within [0, size).
+  val mod = index % size
+  return if (mod >= 0) mod else mod + size
 }

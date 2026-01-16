@@ -46,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val TAG = "AGLlmChatViewModel"
 private val STATS =
@@ -348,8 +349,16 @@ open class LlmChatViewModelBase(private val chatHistoryRepository: ChatHistoryRe
   fun runAgain(model: Model, message: ChatMessageText, onError: (String) -> Unit) {
     viewModelScope.launch(Dispatchers.Default) {
       // Wait for model to be initialized.
-      while (model.instance == null) {
-        delay(100)
+      val ready =
+        withTimeoutOrNull(30_000) {
+          while (model.instance == null) {
+            delay(100)
+          }
+          true
+        }
+      if (ready == null) {
+        onError("Model not ready. Please try again.")
+        return@launch
       }
 
       // Clone the clicked message and add it.

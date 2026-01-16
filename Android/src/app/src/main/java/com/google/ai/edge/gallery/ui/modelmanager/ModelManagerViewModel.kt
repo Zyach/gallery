@@ -150,7 +150,7 @@ constructor(
   private val externalFilesDir = context.getExternalFilesDir(null)
   protected val _uiState = MutableStateFlow(createEmptyUiState())
   val uiState = _uiState.asStateFlow()
-  private val pendingCleanupCallbacks = mutableMapOf<String, MutableList<() -> Unit>>()
+  private val pendingCleanupCallbacks = mutableMapOf<String, () -> Unit>()
 
   val authService = AuthorizationService(context)
   var curAccessToken: String = ""
@@ -203,6 +203,9 @@ constructor(
   }
 
   fun selectModel(model: Model) {
+    if (_uiState.value.selectedModel.name == model.name) {
+      return
+    }
     _uiState.update { _uiState.value.copy(selectedModel = model) }
   }
 
@@ -287,7 +290,6 @@ constructor(
           model.pendingInitialize = true
           Log.d(TAG, "Model '${model.name}' is initializing. Queuing re-init.")
         } else {
-          model.cleanUpAfterInit = false
           Log.d(TAG, "Model '${model.name}' is being initialized. Skipping.")
         }
         return@launch
@@ -346,13 +348,25 @@ constructor(
         }
 
         // Call the model initialization function.
-        getCustomTaskByTaskId(id = task.id)
-          ?.initializeModelFn(
-            context = context,
-            coroutineScope = viewModelScope,
+        val customTask = getCustomTaskByTaskId(id = task.id)
+        if (customTask == null) {
+          Log.d(TAG, "No CustomTask registered for '${task.id}'.")
+          model.initializing = false
+          model.pendingInitialize = false
+          model.cleanUpAfterInit = false
+          updateModelInitializationStatus(
             model = model,
-            onDone = onDone,
+            status = ModelInitializationStatusType.ERROR,
+            error = "Missing task implementation",
           )
+          return@start
+        }
+        customTask.initializeModelFn(
+          context = context,
+          coroutineScope = viewModelScope,
+          model = model,
+          onDone = onDone,
+        )
       }
 
       cleanupModel(context = context, task = task, model = model, onDone = { startInitialization() })
@@ -372,7 +386,7 @@ constructor(
         )
         Log.d(TAG, "Clean up model '${model.name}' done")
         onDone()
-        pendingCleanupCallbacks.remove(model.name)?.forEach { it() }
+        pendingCleanupCallbacks.remove(model.name)?.invoke()
       }
       getCustomTaskByTaskId(id = task.id)
         ?.cleanUpModelFn(
@@ -390,7 +404,7 @@ constructor(
           "Model '${model.name}' is still initializing.. Will clean up after it is done initializing",
         )
         model.cleanUpAfterInit = true
-        pendingCleanupCallbacks.getOrPut(model.name) { mutableListOf() }.add(onDone)
+        pendingCleanupCallbacks[model.name] = onDone
       } else {
         onDone()
       }

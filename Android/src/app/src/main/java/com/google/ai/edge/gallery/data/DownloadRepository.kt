@@ -30,6 +30,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.os.bundleOf
+import androidx.lifecycle.Observer
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -162,8 +163,14 @@ class DefaultDownloadRepository(
     model: Model,
     onStatusUpdated: (model: Model, status: ModelDownloadStatus) -> Unit,
   ) {
-    workManager.getWorkInfoByIdLiveData(workerId).observeForever { workInfo ->
-      if (workInfo != null) {
+    val liveData = workManager.getWorkInfoByIdLiveData(workerId)
+    lateinit var observer: Observer<WorkInfo?>
+    observer =
+      Observer { workInfo ->
+        if (workInfo == null) {
+          return@Observer
+        }
+
         when (workInfo.state) {
           WorkInfo.State.ENQUEUED -> {
             downloadStartTimeSharedPreferences.edit {
@@ -223,6 +230,7 @@ class DefaultDownloadRepository(
               ),
             )
             downloadStartTimeSharedPreferences.edit { remove(model.name) }
+            liveData.removeObserver(observer)
           }
 
           WorkInfo.State.FAILED,
@@ -260,12 +268,14 @@ class DefaultDownloadRepository(
               ),
             )
             downloadStartTimeSharedPreferences.edit { remove(model.name) }
+            liveData.removeObserver(observer)
           }
 
           else -> {}
         }
       }
-    }
+
+    liveData.observeForever(observer)
   }
 
   private fun sendNotification(title: String, text: String, taskId: String, modelName: String) {
