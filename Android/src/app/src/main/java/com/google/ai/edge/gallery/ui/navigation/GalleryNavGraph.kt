@@ -379,17 +379,16 @@ private fun CustomTaskScreen(
           onBackClicked = { handleNavigateUp() },
           onModelSelected = { prevModel, newSelectedModel ->
             scope.launch(Dispatchers.Default) {
-              // Clean up prev model.
               if (prevModel.name != newSelectedModel.name) {
                 modelManagerViewModel.cleanupModel(
                   context = context,
                   task = task,
                   model = prevModel,
+                  onDone = { modelManagerViewModel.selectModel(model = newSelectedModel) },
                 )
+              } else {
+                modelManagerViewModel.selectModel(model = newSelectedModel)
               }
-
-              // Update selected model.
-              modelManagerViewModel.selectModel(model = newSelectedModel)
             }
           },
         )

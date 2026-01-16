@@ -39,10 +39,8 @@ import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelAllowlist
 import com.google.ai.edge.gallery.data.ModelDownloadStatus
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
-import com.google.ai.edge.gallery.data.NumberSliderConfig
 import com.google.ai.edge.gallery.data.TMP_FILE_EXT
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.data.ValueType
 import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
@@ -132,15 +130,6 @@ data class ModelManagerUiState(
   }
 }
 
-private val RESET_CONVERSATION_TURN_COUNT_CONFIG =
-  NumberSliderConfig(
-    key = ConfigKeys.RESET_CONVERSATION_TURN_COUNT,
-    sliderMin = 1f,
-    sliderMax = 30f,
-    defaultValue = 3f,
-    valueType = ValueType.INT,
-  )
-
 /**
  * ViewModel responsible for managing models, their download status, and initialization.
  *
@@ -161,6 +150,7 @@ constructor(
   private val externalFilesDir = context.getExternalFilesDir(null)
   protected val _uiState = MutableStateFlow(createEmptyUiState())
   val uiState = _uiState.asStateFlow()
+  private val pendingCleanupCallbacks = mutableMapOf<String, MutableList<() -> Unit>>()
 
   val authService = AuthorizationService(context)
   var curAccessToken: String = ""
@@ -292,34 +282,52 @@ constructor(
 
       // Skip if initialization is in progress.
       if (model.initializing) {
-        model.cleanUpAfterInit = false
-        Log.d(TAG, "Model '${model.name}' is being initialized. Skipping.")
+        if (force) {
+          model.cleanUpAfterInit = true
+          model.pendingInitialize = true
+          Log.d(TAG, "Model '${model.name}' is initializing. Queuing re-init.")
+        } else {
+          model.cleanUpAfterInit = false
+          Log.d(TAG, "Model '${model.name}' is being initialized. Skipping.")
+        }
         return@launch
       }
 
-      // Clean up.
-      cleanupModel(context = context, task = task, model = model)
+      val startInitialization = start@{
+        if (model.initializing) {
+          Log.d(TAG, "Model '${model.name}' is being initialized. Skipping.")
+          return@start
+        }
 
-      // Start initialization.
-      Log.d(TAG, "Initializing model '${model.name}'...")
-      model.initializing = true
-      updateModelInitializationStatus(
-        model = model,
-        status = ModelInitializationStatusType.INITIALIZING,
-      )
+        Log.d(TAG, "Initializing model '${model.name}'...")
+        model.initializing = true
+        updateModelInitializationStatus(
+          model = model,
+          status = ModelInitializationStatusType.INITIALIZING,
+        )
 
-      val onDone: (error: String) -> Unit = { error ->
-        model.initializing = false
-        if (model.instance != null) {
-          Log.d(TAG, "Model '${model.name}' initialized successfully")
-          updateModelInitializationStatus(
-            model = model,
-            status = ModelInitializationStatusType.INITIALIZED,
-          )
-          if (model.cleanUpAfterInit) {
-            Log.d(TAG, "Model '${model.name}' needs cleaning up after init.")
-            cleanupModel(context = context, task = task, model = model)
-          }
+        val onDone: (error: String) -> Unit = { error ->
+          model.initializing = false
+          if (model.instance != null) {
+            Log.d(TAG, "Model '${model.name}' initialized successfully")
+            updateModelInitializationStatus(
+              model = model,
+              status = ModelInitializationStatusType.INITIALIZED,
+            )
+            if (model.cleanUpAfterInit) {
+              Log.d(TAG, "Model '${model.name}' needs cleaning up after init.")
+              cleanupModel(
+                context = context,
+                task = task,
+                model = model,
+                onDone = {
+                  if (model.pendingInitialize) {
+                    model.pendingInitialize = false
+                    initializeModel(context = context, task = task, model = model, force = true)
+                  }
+                },
+              )
+            }
         } else if (error.isNotEmpty()) {
           Log.d(TAG, "Model '${model.name}' failed to initialize")
           updateModelInitializationStatus(
@@ -327,17 +335,27 @@ constructor(
             status = ModelInitializationStatusType.ERROR,
             error = error,
           )
+          if (model.cleanUpAfterInit) {
+            cleanupModel(context = context, task = task, model = model)
+          }
+          if (model.pendingInitialize) {
+            model.pendingInitialize = false
+            initializeModel(context = context, task = task, model = model, force = true)
+          }
         }
+        }
+
+        // Call the model initialization function.
+        getCustomTaskByTaskId(id = task.id)
+          ?.initializeModelFn(
+            context = context,
+            coroutineScope = viewModelScope,
+            model = model,
+            onDone = onDone,
+          )
       }
 
-      // Call the model initialization function.
-      getCustomTaskByTaskId(id = task.id)
-        ?.initializeModelFn(
-          context = context,
-          coroutineScope = viewModelScope,
-          model = model,
-          onDone = onDone,
-        )
+      cleanupModel(context = context, task = task, model = model, onDone = { startInitialization() })
     }
   }
 
@@ -354,6 +372,7 @@ constructor(
         )
         Log.d(TAG, "Clean up model '${model.name}' done")
         onDone()
+        pendingCleanupCallbacks.remove(model.name)?.forEach { it() }
       }
       getCustomTaskByTaskId(id = task.id)
         ?.cleanUpModelFn(
@@ -371,6 +390,9 @@ constructor(
           "Model '${model.name}' is still initializing.. Will clean up after it is done initializing",
         )
         model.cleanUpAfterInit = true
+        pendingCleanupCallbacks.getOrPut(model.name) { mutableListOf() }.add(onDone)
+      } else {
+        onDone()
       }
     }
   }
@@ -479,7 +501,6 @@ constructor(
             BuiltInTaskId.LLM_ASK_IMAGE,
             BuiltInTaskId.LLM_ASK_AUDIO,
             BuiltInTaskId.LLM_PROMPT_LAB,
-            BuiltInTaskId.LLM_TINY_GARDEN,
             BuiltInTaskId.LLM_MOBILE_ACTIONS,
           )
       )) {
@@ -492,20 +513,12 @@ constructor(
       if (
         (task.id == BuiltInTaskId.LLM_ASK_IMAGE && model.llmSupportImage) ||
           (task.id == BuiltInTaskId.LLM_ASK_AUDIO && model.llmSupportAudio) ||
-          (task.id == BuiltInTaskId.LLM_TINY_GARDEN && model.llmSupportTinyGarden) ||
           (task.id == BuiltInTaskId.LLM_MOBILE_ACTIONS && model.llmSupportMobileActions) ||
           (task.id != BuiltInTaskId.LLM_ASK_IMAGE &&
             task.id != BuiltInTaskId.LLM_ASK_AUDIO &&
-            task.id != BuiltInTaskId.LLM_TINY_GARDEN &&
             task.id != BuiltInTaskId.LLM_MOBILE_ACTIONS)
       ) {
         task.models.add(model)
-        if (task.id == BuiltInTaskId.LLM_TINY_GARDEN) {
-          val newConfigs = model.configs.toMutableList()
-          newConfigs.add(RESET_CONVERSATION_TURN_COUNT_CONFIG)
-          model.configs = newConfigs
-          model.preProcess()
-        }
       }
       task.updateTrigger.value = System.currentTimeMillis()
     }
@@ -781,11 +794,6 @@ constructor(
             val task = curTasks.find { it.id == taskType }
             task?.models?.add(model)
 
-            if (task?.id == BuiltInTaskId.LLM_TINY_GARDEN) {
-              val newConfigs = model.configs.toMutableList()
-              newConfigs.add(RESET_CONVERSATION_TURN_COUNT_CONFIG)
-              model.configs = newConfigs
-            }
           }
         }
 
@@ -918,13 +926,6 @@ constructor(
       if (model.llmSupportAudio) {
         tasks.get(key = BuiltInTaskId.LLM_ASK_AUDIO)?.models?.add(model)
       }
-      if (model.llmSupportTinyGarden) {
-        tasks.get(key = BuiltInTaskId.LLM_TINY_GARDEN)?.models?.add(model)
-        val newConfigs = model.configs.toMutableList()
-        newConfigs.add(RESET_CONVERSATION_TURN_COUNT_CONFIG)
-        model.configs = newConfigs
-        model.preProcess()
-      }
       if (model.llmSupportMobileActions) {
         tasks.get(key = BuiltInTaskId.LLM_MOBILE_ACTIONS)?.models?.add(model)
       }
@@ -970,7 +971,6 @@ constructor(
         .toMutableList()
     val llmSupportImage = info.llmConfig.supportImage
     val llmSupportAudio = info.llmConfig.supportAudio
-    val llmSupportTinyGarden = info.llmConfig.supportTinyGarden
     val llmSupportMobileActions = info.llmConfig.supportMobileActions
     val model =
       Model(
@@ -984,7 +984,6 @@ constructor(
         imported = true,
         llmSupportImage = llmSupportImage,
         llmSupportAudio = llmSupportAudio,
-        llmSupportTinyGarden = llmSupportTinyGarden,
         llmSupportMobileActions = llmSupportMobileActions,
       )
     model.preProcess()

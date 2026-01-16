@@ -137,12 +137,15 @@ fun LlmSingleTurnScreen(
         onModelSelected = { prevModel, newSelectedModel ->
           scope.launch(Dispatchers.Default) {
             if (prevModel.name != newSelectedModel.name) {
-              // Clean up prev model.
-              modelManagerViewModel.cleanupModel(context = context, task = task, model = prevModel)
+              modelManagerViewModel.cleanupModel(
+                context = context,
+                task = task,
+                model = prevModel,
+                onDone = { modelManagerViewModel.selectModel(model = newSelectedModel) },
+              )
+            } else {
+              modelManagerViewModel.selectModel(model = newSelectedModel)
             }
-
-            // Update selected model.
-            modelManagerViewModel.selectModel(model = newSelectedModel)
           }
         },
       )

@@ -210,9 +210,6 @@ data class Model(
   /** Whether the LLM model supports audio input. */
   val llmSupportAudio: Boolean = false,
 
-  /** Whether the LLM model supports tiny garden. */
-  val llmSupportTinyGarden: Boolean = false,
-
   /** Whether the LLM model supports mobile actions. */
   val llmSupportMobileActions: Boolean = false,
 
@@ -226,6 +223,7 @@ data class Model(
   var initializing: Boolean = false,
   // TODO(jingjin): use a "queue" system to manage model init and cleanup.
   var cleanUpAfterInit: Boolean = false,
+  var pendingInitialize: Boolean = false,
   var configValues: Map<String, Any> = mapOf(),
   var prevConfigValues: Map<String, Any> = mapOf(),
   var totalBytes: Long = 0L,

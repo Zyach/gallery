@@ -39,7 +39,6 @@ data class AllowedModel(
   val disabled: Boolean? = null,
   val llmSupportImage: Boolean? = null,
   val llmSupportAudio: Boolean? = null,
-  val llmSupportTinyGarden: Boolean? = null,
   val llmSupportMobileActions: Boolean? = null,
   val minDeviceMemoryInGb: Int? = null,
   val bestForTaskTypes: List<String>? = null,
@@ -57,8 +56,7 @@ data class AllowedModel(
         taskTypes.contains(BuiltInTaskId.LLM_PROMPT_LAB) ||
         taskTypes.contains(BuiltInTaskId.LLM_ASK_AUDIO) ||
         taskTypes.contains(BuiltInTaskId.LLM_ASK_IMAGE) ||
-        taskTypes.contains(BuiltInTaskId.LLM_MOBILE_ACTIONS) ||
-        taskTypes.contains(BuiltInTaskId.LLM_TINY_GARDEN)
+        taskTypes.contains(BuiltInTaskId.LLM_MOBILE_ACTIONS)
     var configs: MutableList<Config> = mutableListOf()
     if (isLlmModel) {
       val defaultTopK: Int = defaultConfig.topK ?: DEFAULT_TOPK
@@ -110,7 +108,6 @@ data class AllowedModel(
       learnMoreUrl = "https://huggingface.co/${modelId}",
       llmSupportImage = llmSupportImage == true,
       llmSupportAudio = llmSupportAudio == true,
-      llmSupportTinyGarden = llmSupportTinyGarden == true,
       llmSupportMobileActions = llmSupportMobileActions == true,
       bestForTaskIds = bestForTaskTypes ?: listOf(),
       localModelFilePathOverride = localModelFilePathOverride ?: "",

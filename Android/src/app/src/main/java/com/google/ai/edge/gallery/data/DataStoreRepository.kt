@@ -48,10 +48,6 @@ interface DataStoreRepository {
   fun isTosAccepted(): Boolean
 
   fun acceptTos()
-
-  fun getHasRunTinyGarden(): Boolean
-
-  fun setHasRunTinyGarden(hasRun: Boolean)
 }
 
 /** Repository for managing data using Proto DataStore. */
@@ -155,16 +151,4 @@ class DefaultDataStoreRepository(
     }
   }
 
-  override fun getHasRunTinyGarden(): Boolean {
-    return runBlocking {
-      val settings = dataStore.data.first()
-      settings.hasRunTinyGarden
-    }
-  }
-
-  override fun setHasRunTinyGarden(hasRun: Boolean) {
-    runBlocking {
-      dataStore.updateData { settings -> settings.toBuilder().setHasRunTinyGarden(hasRun).build() }
-    }
-  }
 }

@@ -123,7 +123,6 @@ object BuiltInTaskId {
   const val LLM_ASK_IMAGE = "llm_ask_image"
   const val LLM_ASK_AUDIO = "llm_ask_audio"
   const val LLM_MOBILE_ACTIONS = "llm_mobile_actions"
-  const val LLM_TINY_GARDEN = "llm_tiny_garden"
 }
 
 private val allLegacyTaskIds: Set<String> =

@@ -165,9 +165,15 @@ fun ChatView(
         onBackClicked = { handleNavigateUp() },
         onModelSelected = { prevModel, curModel ->
           if (prevModel.name != curModel.name) {
-            modelManagerViewModel.cleanupModel(context = context, task = task, model = prevModel)
+            modelManagerViewModel.cleanupModel(
+              context = context,
+              task = task,
+              model = prevModel,
+              onDone = { modelManagerViewModel.selectModel(model = curModel) },
+            )
+          } else {
+            modelManagerViewModel.selectModel(model = curModel)
           }
-          modelManagerViewModel.selectModel(model = curModel)
         },
       )
     },
