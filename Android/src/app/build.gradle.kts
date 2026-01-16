@@ -31,6 +31,23 @@ android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
 
+  flavorDimensions += "perf"
+
+  productFlavors {
+    create("battery") {
+      dimension = "perf"
+      buildConfigField("String", "PERF_PROFILE", "\"battery\"")
+    }
+    create("balanced") {
+      dimension = "perf"
+      buildConfigField("String", "PERF_PROFILE", "\"balanced\"")
+    }
+    create("speed") {
+      dimension = "perf"
+      buildConfigField("String", "PERF_PROFILE", "\"speed\"")
+    }
+  }
+
   defaultConfig {
     applicationId = "com.google.aiedge.gallery"
     minSdk = 31
