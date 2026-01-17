@@ -18,8 +18,8 @@ package com.google.ai.edge.gallery.data.chathistory
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
 import android.net.Uri
+import android.util.Log
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageError
@@ -32,6 +32,7 @@ import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
 import com.google.ai.edge.gallery.ui.common.chat.ChatSide
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
 import com.google.gson.Gson
+import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import java.io.File
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -55,6 +56,7 @@ constructor(
   private val dao: ChatHistoryDao,
   private val attachmentStorage: ChatAttachmentStorage,
   private val context: Context,
+  private val prefs: LlmHttpPrefs,
 ) {
   fun getSessions(): Flow<List<ChatSessionEntity>> = dao.getSessions()
 
@@ -83,6 +85,20 @@ constructor(
   data class ImportResult(val sessions: Int, val messages: Int, val attachments: Int)
 
   suspend fun createSession(taskId: String, modelName: String, title: String): ChatSessionEntity {
+    if (!prefs.isHistoryEnabled(context)) {
+      // Historial desactivado: devolver sesión efímera en memoria (no se persiste).
+      return ChatSessionEntity(
+        id = "ephemeral",
+        taskId = taskId,
+        modelName = modelName,
+        title = title.ifBlank { "New chat" },
+        createdAtMs = 0,
+        updatedAtMs = 0,
+        lastMessagePreview = "",
+        messageCount = 0,
+        isPinned = false,
+      )
+    }
     val now = System.currentTimeMillis()
     val session =
       ChatSessionEntity(
@@ -116,6 +132,7 @@ constructor(
   }
 
   suspend fun appendMessages(sessionId: String, messages: List<ChatMessage>) {
+    if (!prefs.isHistoryEnabled(context)) return
     if (messages.isEmpty()) {
       return
     }

@@ -36,6 +36,7 @@ import com.google.ai.edge.gallery.data.chathistory.ChatHistoryDao
 import com.google.ai.edge.gallery.data.chathistory.ChatHistoryDatabase
 import com.google.ai.edge.gallery.data.chathistory.ChatHistoryKeyManager
 import com.google.ai.edge.gallery.data.chathistory.ChatHistoryRepository
+import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.UserData
 import dagger.Module
@@ -168,6 +169,6 @@ internal object AppModule {
     attachmentStorage: ChatAttachmentStorage,
     @ApplicationContext context: Context,
   ): ChatHistoryRepository {
-    return ChatHistoryRepository(dao, attachmentStorage, context)
+    return ChatHistoryRepository(dao, attachmentStorage, context, LlmHttpPrefs)
   }
 }

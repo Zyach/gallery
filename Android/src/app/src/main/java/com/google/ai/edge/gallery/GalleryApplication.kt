@@ -17,6 +17,7 @@
 package com.google.ai.edge.gallery
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.ui.theme.ThemeSettings
 import com.google.firebase.FirebaseApp
@@ -35,5 +36,13 @@ class GalleryApplication : Application() {
     ThemeSettings.themeOverride.value = dataStoreRepository.readTheme()
 
     FirebaseApp.initializeApp(this)
+  }
+
+  override fun onTrimMemory(level: Int) {
+    super.onTrimMemory(level)
+    // Mantenerse ligero en segundo plano sin matar servicios: solo GC bajo presión.
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+      System.gc()
+    }
   }
 }

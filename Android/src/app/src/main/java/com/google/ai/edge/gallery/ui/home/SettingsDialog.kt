@@ -113,6 +113,7 @@ fun SettingsDialog(
   val context = LocalContext.current
   var httpEnabled by remember { mutableStateOf(LlmHttpPrefs.isEnabled(context)) }
   var httpPortText by remember { mutableStateOf(LlmHttpPrefs.getPort(context).toString()) }
+  var historyEnabled by remember { mutableStateOf(LlmHttpPrefs.isHistoryEnabled(context)) }
 
   Dialog(onDismissRequest = onDismissed) {
     val focusManager = LocalFocusManager.current
@@ -231,6 +232,14 @@ fun SettingsDialog(
                   .widthIn(min = 80.dp)
               )
               Text("port", style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+              androidx.compose.material3.Switch(
+                checked = historyEnabled,
+                onCheckedChange = { checked -> historyEnabled = checked },
+                enabled = httpEnabled,
+              )
+              Text("Guardar historial de chat", style = MaterialTheme.typography.bodyMedium)
             }
             Text(
               "Every Code puede llamar a http://127.0.0.1:<puerto>/generate",
