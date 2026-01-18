@@ -47,6 +47,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 private const val TAG = "AGLlmChatViewModel"
 private val STATS =
@@ -125,7 +127,8 @@ open class LlmChatViewModelBase(private val chatHistoryRepository: ChatHistoryRe
         val bitmaps = stored.attachments.mapNotNull { attachment ->
           try {
             val bytes = chatHistoryRepository.readAttachmentBytes(attachment.uri)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            decodeSampledBitmapFromBytes(bytes = bytes, reqWidth = 1024, reqHeight = 1024)
+              ?: BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
           } catch (e: Exception) {
             Log.e(TAG, "Failed to decode stored image", e)
             null
@@ -403,6 +406,36 @@ open class LlmChatViewModelBase(private val chatHistoryRepository: ChatHistoryRe
       )
     }
   }
+}
+
+private fun decodeSampledBitmapFromBytes(
+  bytes: ByteArray,
+  reqWidth: Int,
+  reqHeight: Int,
+): Bitmap? {
+  val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+  BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+  options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+  options.inJustDecodeBounds = false
+  return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+}
+
+private fun calculateInSampleSize(
+  options: BitmapFactory.Options,
+  reqWidth: Int,
+  reqHeight: Int,
+): Int {
+  val height: Int = options.outHeight
+  val width: Int = options.outWidth
+  var inSampleSize = 1
+
+  if (height > reqHeight || width > reqWidth) {
+    val heightRatio = (height.toFloat() / reqHeight.toFloat()).roundToInt()
+    val widthRatio = (width.toFloat() / reqWidth.toFloat()).roundToInt()
+    inSampleSize = max(heightRatio, widthRatio)
+  }
+
+  return if (inSampleSize < 1) 1 else inSampleSize
 }
 
 @HiltViewModel

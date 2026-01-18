@@ -16,6 +16,7 @@
 
 package com.google.ai.edge.gallery.ui.llmchat
 
+import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
@@ -27,6 +28,7 @@ import com.google.ai.edge.gallery.data.DEFAULT_TEMPERATURE
 import com.google.ai.edge.gallery.data.DEFAULT_TOPK
 import com.google.ai.edge.gallery.data.DEFAULT_TOPP
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
@@ -40,8 +42,11 @@ import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
+import kotlin.math.min
 
 private const val TAG = "AGLlmChatModelHelper"
+private const val LOW_MEM_AVAIL_BYTES = 2L * 1024L * 1024L * 1024L
+private const val LOW_MEM_MAX_TOKENS = 512
 
 typealias ResultListener = (partialResult: String, done: Boolean) -> Unit
 
@@ -52,6 +57,22 @@ data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 object LlmChatModelHelper {
   // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
+
+  private fun isLowMemory(context: Context): Boolean {
+    val activityManager =
+      context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
+    val memoryInfo = ActivityManager.MemoryInfo()
+    activityManager.getMemoryInfo(memoryInfo)
+    return activityManager.isLowRamDevice || memoryInfo.lowMemory ||
+      memoryInfo.availMem < LOW_MEM_AVAIL_BYTES
+  }
+
+  private fun modelSupportsAccelerator(model: Model, accelerator: Accelerator): Boolean {
+    val config =
+      model.configs.filterIsInstance<SegmentedButtonConfig>()
+        .firstOrNull { it.key == ConfigKeys.ACCELERATOR }
+    return config?.options?.contains(accelerator.label) == true
+  }
 
   @OptIn(ExperimentalApi::class) // opt-in experimental flags
   fun initialize(
@@ -73,12 +94,25 @@ object LlmChatModelHelper {
       model.getFloatConfigValue(key = ConfigKeys.TEMPERATURE, defaultValue = DEFAULT_TEMPERATURE)
     val accelerator =
       model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = Accelerator.GPU.label)
+    val isLowMemory = isLowMemory(context)
+    val effectiveMaxTokens = if (isLowMemory) min(maxTokens, LOW_MEM_MAX_TOKENS) else maxTokens
+    if (effectiveMaxTokens != maxTokens) {
+      Log.w(TAG, "Low memory detected. Reducing max tokens from $maxTokens to $effectiveMaxTokens")
+    }
+    val supportsCpu = modelSupportsAccelerator(model, Accelerator.CPU)
+    val effectiveAccelerator =
+      if (isLowMemory && accelerator == Accelerator.GPU.label && supportsCpu) {
+        Log.w(TAG, "Low memory detected. Falling back from GPU to CPU backend")
+        Accelerator.CPU.label
+      } else {
+        accelerator
+      }
     Log.d(TAG, "Initializing...")
     val shouldEnableImage = supportImage
     val shouldEnableAudio = supportAudio
     Log.d(TAG, "Enable image: $shouldEnableImage, enable audio: $shouldEnableAudio")
     val preferredBackend =
-      when (accelerator) {
+      when (effectiveAccelerator) {
         Accelerator.CPU.label -> Backend.CPU
         Accelerator.GPU.label -> Backend.GPU
         else -> Backend.CPU
@@ -92,7 +126,7 @@ object LlmChatModelHelper {
         backend = preferredBackend,
         visionBackend = if (shouldEnableImage) Backend.GPU else null, // must be GPU for Gemma 3n
         audioBackend = if (shouldEnableAudio) Backend.CPU else null, // must be CPU for Gemma 3n
-        maxNumTokens = maxTokens,
+        maxNumTokens = effectiveMaxTokens,
         cacheDir =
           if (modelPath.startsWith("/data/local/tmp"))
             context.getExternalFilesDir(null)?.absolutePath
