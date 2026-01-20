@@ -2,3 +2,5 @@
 .gradle/
 device_report.txt
 Android/src/gradle.properties
+mobile-actions/
+state/
