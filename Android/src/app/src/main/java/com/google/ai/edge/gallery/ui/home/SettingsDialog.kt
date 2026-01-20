@@ -236,7 +236,10 @@ fun SettingsDialog(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
               androidx.compose.material3.Switch(
                 checked = historyEnabled,
-                onCheckedChange = { checked -> historyEnabled = checked },
+                onCheckedChange = { checked ->
+                  historyEnabled = checked
+                  LlmHttpPrefs.setHistoryEnabled(context, checked)
+                },
                 enabled = httpEnabled,
               )
               Text("Guardar historial de chat", style = MaterialTheme.typography.bodyMedium)
