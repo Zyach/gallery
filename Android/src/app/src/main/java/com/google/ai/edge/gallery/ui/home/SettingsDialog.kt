@@ -114,6 +114,9 @@ fun SettingsDialog(
   var httpEnabled by remember { mutableStateOf(LlmHttpPrefs.isEnabled(context)) }
   var httpPortText by remember { mutableStateOf(LlmHttpPrefs.getPort(context).toString()) }
   var historyEnabled by remember { mutableStateOf(LlmHttpPrefs.isHistoryEnabled(context)) }
+  var payloadLoggingEnabled by remember {
+    mutableStateOf(LlmHttpPrefs.isPayloadLoggingEnabled(context))
+  }
 
   Dialog(onDismissRequest = onDismissed) {
     val focusManager = LocalFocusManager.current
@@ -243,6 +246,17 @@ fun SettingsDialog(
                 enabled = httpEnabled,
               )
               Text("Guardar historial de chat", style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+              androidx.compose.material3.Switch(
+                checked = payloadLoggingEnabled,
+                onCheckedChange = { checked ->
+                  payloadLoggingEnabled = checked
+                  LlmHttpPrefs.setPayloadLoggingEnabled(context, checked)
+                },
+                enabled = httpEnabled,
+              )
+              Text("Loggear payloads HTTP", style = MaterialTheme.typography.bodyMedium)
             }
             Text(
               "Every Code puede llamar a http://127.0.0.1:<puerto>/generate",

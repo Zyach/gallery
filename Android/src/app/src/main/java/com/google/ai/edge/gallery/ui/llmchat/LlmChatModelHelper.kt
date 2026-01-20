@@ -45,8 +45,10 @@ import java.util.concurrent.CancellationException
 import kotlin.math.min
 
 private const val TAG = "AGLlmChatModelHelper"
-private const val LOW_MEM_AVAIL_BYTES = 2L * 1024L * 1024L * 1024L
 private const val LOW_MEM_MAX_TOKENS = 512
+private const val LOW_MEM_THRESHOLD_FRACTION = 0.15
+private const val LOW_MEM_MIN_BYTES = 768L * 1024L * 1024L
+private const val LOW_MEM_MAX_BYTES = 1536L * 1024L * 1024L
 
 typealias ResultListener = (partialResult: String, done: Boolean) -> Unit
 
@@ -63,8 +65,20 @@ object LlmChatModelHelper {
       context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
     val memoryInfo = ActivityManager.MemoryInfo()
     activityManager.getMemoryInfo(memoryInfo)
-    return activityManager.isLowRamDevice || memoryInfo.lowMemory ||
-      memoryInfo.availMem < LOW_MEM_AVAIL_BYTES
+    val threshold = lowMemThresholdBytes(memoryInfo)
+    val lowByAvail = memoryInfo.availMem < threshold
+    if (lowByAvail) {
+      Log.w(
+        TAG,
+        "Low memory detected. avail=${memoryInfo.availMem} threshold=$threshold total=${memoryInfo.totalMem}",
+      )
+    }
+    return activityManager.isLowRamDevice || memoryInfo.lowMemory || lowByAvail
+  }
+
+  private fun lowMemThresholdBytes(memoryInfo: ActivityManager.MemoryInfo): Long {
+    val percentThreshold = (memoryInfo.totalMem * LOW_MEM_THRESHOLD_FRACTION).toLong()
+    return percentThreshold.coerceIn(LOW_MEM_MIN_BYTES, LOW_MEM_MAX_BYTES)
   }
 
   private fun modelSupportsAccelerator(model: Model, accelerator: Accelerator): Boolean {

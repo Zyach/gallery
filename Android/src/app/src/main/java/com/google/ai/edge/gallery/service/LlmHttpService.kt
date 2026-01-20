@@ -8,6 +8,7 @@ import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.ai.edge.gallery.BuildConfig
@@ -16,6 +17,7 @@ import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelAllowlist
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
+import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import com.google.gson.Gson
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.serialization.Serializable
@@ -24,9 +26,11 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.ByteArrayInputStream
+import java.io.FileWriter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Foreground service exposing a minimal HTTP API for local LLM inference.
@@ -42,6 +46,10 @@ class LlmHttpService : Service() {
   private val modelsPayload = """{"object":"list","data":[{"id":"local","object":"model"}]}"""
   private val logTag = "LlmHttpService"
   private val maxLogChars = 2000
+  private val maxBodyBytes = 512 * 1024
+  private val logFileMaxBytes = 512 * 1024L
+  private val requestCounter = AtomicLong(0)
+  private val logExecutor = Executors.newSingleThreadExecutor()
 
   override fun onCreate() {
     super.onCreate()
@@ -91,6 +99,7 @@ class LlmHttpService : Service() {
 
   override fun onDestroy() {
     server?.stop()
+    logExecutor.shutdown()
     super.onDestroy()
   }
 
@@ -119,6 +128,47 @@ class LlmHttpService : Service() {
     }
   }
 
+  private fun nextRequestId(): String = "r${requestCounter.incrementAndGet()}"
+
+  private fun payloadLoggingEnabled(): Boolean =
+    BuildConfig.DEBUG || LlmHttpPrefs.isPayloadLoggingEnabled(this)
+
+  private fun logEvent(message: String) {
+    val line = "LLM_HTTP $message"
+    Log.i(logTag, line)
+    if (payloadLoggingEnabled()) {
+      logToFile(line)
+    }
+  }
+
+  private fun logPayload(label: String, body: String, requestId: String) {
+    if (!payloadLoggingEnabled()) return
+    val trimmed =
+      if (body.length <= maxLogChars) body else body.take(maxLogChars) + "...(truncated)"
+    val line = "LLM_HTTP payload id=$requestId label=\"$label\" bytes=${body.length} data=\"$trimmed\""
+    Log.d(logTag, line)
+    logToFile(line)
+  }
+
+  private fun logToFile(line: String) {
+    val baseDir = getExternalFilesDir(null) ?: return
+    val logDir = File(baseDir, "edgegallery")
+    val logFile = File(logDir, "llm_http.log")
+    val stampedLine = "${System.currentTimeMillis()} $line\n"
+    logExecutor.execute {
+      try {
+        if (!logDir.exists()) logDir.mkdirs()
+        if (logFile.exists() && logFile.length() > logFileMaxBytes) {
+          val rotated = File(logDir, "llm_http.log.1")
+          if (rotated.exists()) rotated.delete()
+          logFile.renameTo(rotated)
+        }
+        FileWriter(logFile, true).use { it.append(stampedLine) }
+      } catch (_: Exception) {
+      }
+    }
+  }
+
   private inner class NanoServer(port: Int, private val model: Model) : NanoHTTPD(port) {
     private val executor = Executors.newSingleThreadExecutor()
     private val inferenceLock = Any()
@@ -144,37 +194,49 @@ class LlmHttpService : Service() {
       }
     }
 
-    private fun logPayload(label: String, body: String) {
-      if (!BuildConfig.DEBUG) return
-      val trimmed =
-        if (body.length <= maxLogChars) body else body.take(maxLogChars) + "...(truncated)"
-      Log.d(logTag, "$label: $trimmed")
-    }
-
     private fun handleGenerate(session: IHTTPSession): Response {
+      val requestId = nextRequestId()
       val payload = HashMap<String, String>()
       session.parseBody(payload)
       val body = payload["postData"] ?: return badRequest("empty body")
+      val bodyBytes = body.toByteArray(Charsets.UTF_8).size
+      if (bodyBytes > maxBodyBytes) {
+        logEvent("request_rejected id=$requestId endpoint=/generate reason=payload_too_large bytes=$bodyBytes")
+        return payloadTooLarge()
+      }
 
-      logPayload("POST /generate raw", body)
+      logPayload("POST /generate raw", body, requestId)
 
       val req = json.decodeFromString<GenReq>(body)
-      logPayload("POST /generate prompt", req.prompt)
-      val text = runLlm(req.prompt) ?: return badRequest("llm error")
+      logPayload("POST /generate prompt", req.prompt, requestId)
+      logEvent(
+        "request_start id=$requestId endpoint=/generate bodyBytes=$bodyBytes promptChars=${req.prompt.length}"
+      )
+      val text = runLlm(req.prompt, requestId = requestId, endpoint = "/generate")
+        ?: return badRequest("llm error")
       val res = GenRes(text = text, usage = Usage(prompt_tokens = 0, completion_tokens = 0))
       return okJsonText(json.encodeToString(res))
     }
 
     private fun handleChatCompletion(session: IHTTPSession): Response {
+      val requestId = nextRequestId()
       val payload = HashMap<String, String>()
       session.parseBody(payload)
       val body = payload["postData"] ?: return badRequest("empty body")
+      val bodyBytes = body.toByteArray(Charsets.UTF_8).size
+      if (bodyBytes > maxBodyBytes) {
+        logEvent("request_rejected id=$requestId endpoint=/v1/chat/completions reason=payload_too_large bytes=$bodyBytes")
+        return payloadTooLarge()
+      }
 
-      logPayload("POST /v1/chat/completions raw", body)
+      logPayload("POST /v1/chat/completions raw", body, requestId)
 
       val req = json.decodeFromString<ChatRequest>(body)
       val prompt = req.messages.joinToString("\n") { it.content }
-      logPayload("POST /v1/chat/completions prompt", prompt)
+      logPayload("POST /v1/chat/completions prompt", prompt, requestId)
+      logEvent(
+        "request_start id=$requestId endpoint=/v1/chat/completions bodyBytes=$bodyBytes promptChars=${prompt.length}"
+      )
       if (prompt.isBlank()) {
         val fallback = ChatResponse(
           id = "chatcmpl-local",
@@ -189,9 +251,11 @@ class LlmHttpService : Service() {
           ),
           usage = Usage(prompt_tokens = 0, completion_tokens = 0),
         )
+        logEvent("request_empty id=$requestId endpoint=/v1/chat/completions")
         return okJsonText(json.encodeToString(fallback))
       }
-      val text = runLlm(prompt, timeoutSeconds = 30) ?: return badRequest("llm error")
+      val text = runLlm(prompt, timeoutSeconds = 30, requestId = requestId, endpoint = "/v1/chat/completions")
+        ?: return badRequest("llm error")
 
       val resp = ChatResponse(
         id = "chatcmpl-local",
@@ -210,23 +274,34 @@ class LlmHttpService : Service() {
     }
 
     private fun handleResponses(session: IHTTPSession): Response {
+      val requestId = nextRequestId()
       val payload = HashMap<String, String>()
       session.parseBody(payload)
       val body = payload["postData"] ?: return badRequest("empty body")
+      val bodyBytes = body.toByteArray(Charsets.UTF_8).size
+      if (bodyBytes > maxBodyBytes) {
+        logEvent("request_rejected id=$requestId endpoint=/v1/responses reason=payload_too_large bytes=$bodyBytes")
+        return payloadTooLarge()
+      }
 
-      logPayload("POST /v1/responses raw", body)
+      logPayload("POST /v1/responses raw", body, requestId)
 
       val req = json.decodeFromString<ResponsesRequest>(body)
       val modelId = req.model ?: "local"
       val prompt = extractText(req.messages ?: req.input)
 
-      logPayload("POST /v1/responses prompt", prompt)
+      logPayload("POST /v1/responses prompt", prompt, requestId)
+      logEvent(
+        "request_start id=$requestId endpoint=/v1/responses bodyBytes=$bodyBytes promptChars=${prompt.length}"
+      )
 
       if (prompt.isBlank()) {
+        logEvent("request_empty id=$requestId endpoint=/v1/responses")
         return emptyResponse(modelId, stream = req.stream == true)
       }
 
-      val text = runLlm(prompt, timeoutSeconds = 90) ?: return badRequest("llm error")
+      val text = runLlm(prompt, timeoutSeconds = 90, requestId = requestId, endpoint = "/v1/responses")
+        ?: return badRequest("llm error")
 
       val respBody = ResponsesResponse(
         id = "resp-local",
@@ -250,7 +325,7 @@ class LlmHttpService : Service() {
 
     // Warm up the model once after service start to reduce first-token latency.
     fun warmUpModel() {
-      runLlm("Hola", timeoutSeconds = 10)
+      runLlm("Hola", timeoutSeconds = 10, requestId = "warmup", endpoint = "warmup")
     }
 
     private fun extractText(msgs: List<InputMsg>?): String {
@@ -266,7 +341,12 @@ class LlmHttpService : Service() {
       return lastUserText ?: ""
     }
 
-    private fun runLlm(prompt: String, timeoutSeconds: Long = 30): String? {
+    private fun runLlm(
+      prompt: String,
+      timeoutSeconds: Long = 30,
+      requestId: String,
+      endpoint: String,
+    ): String? {
       // Lazy init model once.
       synchronized(this) {
         if (model.instance == null) {
@@ -285,6 +365,8 @@ class LlmHttpService : Service() {
       val sb = StringBuilder()
       val latch = CountDownLatch(1)
       var error: String? = null
+      val startMs = SystemClock.elapsedRealtime()
+      var firstTokenMs: Long? = null
       executor.execute {
         synchronized(inferenceLock) {
           try {
@@ -292,7 +374,12 @@ class LlmHttpService : Service() {
               model = model,
               input = prompt,
               resultListener = { partial, done ->
-                if (partial.isNotEmpty()) sb.append(partial)
+                if (partial.isNotEmpty()) {
+                  if (firstTokenMs == null) {
+                    firstTokenMs = SystemClock.elapsedRealtime() - startMs
+                  }
+                  sb.append(partial)
+                }
                 if (done) latch.countDown()
               },
               cleanUpListener = {},
@@ -307,8 +394,39 @@ class LlmHttpService : Service() {
       val completed = latch.await(timeoutSeconds, TimeUnit.SECONDS)
       if (!completed) {
         error = "timeout"
+        cancelInference(requestId = requestId, endpoint = endpoint, reason = "timeout")
+        LlmChatModelHelper.resetConversation(
+          model = model,
+          supportImage = false,
+          supportAudio = false,
+        )
+      } else if (error != null) {
+        cancelInference(requestId = requestId, endpoint = endpoint, reason = "error")
       }
-      return if (error != null) null else sb.toString()
+      val totalMs = SystemClock.elapsedRealtime() - startMs
+      val ttfbMs = firstTokenMs?.toString() ?: "-1"
+      val output = sb.toString()
+      return if (error != null) {
+        logEvent(
+          "request_error id=$requestId endpoint=$endpoint error=$error totalMs=$totalMs ttfbMs=$ttfbMs outputChars=${output.length}"
+        )
+        null
+      } else {
+        logEvent(
+          "request_done id=$requestId endpoint=$endpoint totalMs=$totalMs ttfbMs=$ttfbMs outputChars=${output.length}"
+        )
+        output
+      }
+    }
+
+    private fun cancelInference(requestId: String, endpoint: String, reason: String) {
+      val instance = model.instance as? LlmModelInstance ?: return
+      try {
+        instance.conversation.cancelProcess()
+        logEvent("request_cancel id=$requestId endpoint=$endpoint reason=$reason")
+      } catch (e: Exception) {
+        logEvent("request_cancel_error id=$requestId endpoint=$endpoint reason=$reason error=${e.message}")
+      }
     }
 
     private fun sseResponse(modelId: String, text: String): Response {
@@ -417,6 +535,13 @@ class LlmHttpService : Service() {
 
     private fun methodNotAllowed(): Response =
       newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method not allowed")
+
+    private fun payloadTooLarge(): Response =
+      newFixedLengthResponse(
+        Response.Status.BAD_REQUEST,
+        MIME_PLAINTEXT,
+        "Payload too large",
+      )
   }
 
   @Serializable data class GenReq(val prompt: String)
