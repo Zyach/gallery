@@ -41,7 +41,7 @@ class GalleryApplication : Application() {
   override fun onTrimMemory(level: Int) {
     super.onTrimMemory(level)
     // Mantenerse ligero en segundo plano sin matar servicios: solo GC bajo presión.
-    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
       System.gc()
     }
   }

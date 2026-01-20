@@ -8,7 +8,9 @@ import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import com.google.ai.edge.gallery.data.Model
@@ -38,6 +40,8 @@ class LlmHttpService : Service() {
   private var currentPort: Int = DEFAULT_PORT
   private var selectedModel: Model? = null
   private val modelsPayload = """{"object":"list","data":[{"id":"local","object":"model"}]}"""
+  private val logTag = "LlmHttpService"
+  private val maxLogChars = 2000
 
   override fun onCreate() {
     super.onCreate()
@@ -80,7 +84,7 @@ class LlmHttpService : Service() {
 
   override fun onTrimMemory(level: Int) {
     super.onTrimMemory(level)
-    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
       System.gc()
     }
   }
@@ -140,12 +144,22 @@ class LlmHttpService : Service() {
       }
     }
 
+    private fun logPayload(label: String, body: String) {
+      if (!BuildConfig.DEBUG) return
+      val trimmed =
+        if (body.length <= maxLogChars) body else body.take(maxLogChars) + "...(truncated)"
+      Log.d(logTag, "$label: $trimmed")
+    }
+
     private fun handleGenerate(session: IHTTPSession): Response {
       val payload = HashMap<String, String>()
       session.parseBody(payload)
       val body = payload["postData"] ?: return badRequest("empty body")
 
+      logPayload("POST /generate raw", body)
+
       val req = json.decodeFromString<GenReq>(body)
+      logPayload("POST /generate prompt", req.prompt)
       val text = runLlm(req.prompt) ?: return badRequest("llm error")
       val res = GenRes(text = text, usage = Usage(prompt_tokens = 0, completion_tokens = 0))
       return okJsonText(json.encodeToString(res))
@@ -156,8 +170,11 @@ class LlmHttpService : Service() {
       session.parseBody(payload)
       val body = payload["postData"] ?: return badRequest("empty body")
 
+      logPayload("POST /v1/chat/completions raw", body)
+
       val req = json.decodeFromString<ChatRequest>(body)
       val prompt = req.messages.joinToString("\n") { it.content }
+      logPayload("POST /v1/chat/completions prompt", prompt)
       if (prompt.isBlank()) {
         val fallback = ChatResponse(
           id = "chatcmpl-local",
@@ -197,9 +214,13 @@ class LlmHttpService : Service() {
       session.parseBody(payload)
       val body = payload["postData"] ?: return badRequest("empty body")
 
+      logPayload("POST /v1/responses raw", body)
+
       val req = json.decodeFromString<ResponsesRequest>(body)
       val modelId = req.model ?: "local"
       val prompt = extractText(req.messages ?: req.input)
+
+      logPayload("POST /v1/responses prompt", prompt)
 
       if (prompt.isBlank()) {
         return emptyResponse(modelId, stream = req.stream == true)
