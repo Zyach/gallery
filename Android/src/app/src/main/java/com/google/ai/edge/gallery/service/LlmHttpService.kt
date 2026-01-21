@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.LlmHttpPrefs
+import com.google.ai.edge.gallery.data.AllowedModel
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelAllowlist
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
@@ -24,9 +25,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.FileWriter
+import java.io.InputStreamReader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -40,10 +45,15 @@ import java.util.concurrent.atomic.AtomicLong
 class LlmHttpService : Service() {
 
   private var server: NanoServer? = null
-  private val json = Json { ignoreUnknownKeys = true }
+  private val json = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+  }
   private var currentPort: Int = DEFAULT_PORT
-  private var selectedModel: Model? = null
-  private val modelsPayload = """{"object":"list","data":[{"id":"local","object":"model"}]}"""
+  private var defaultModel: Model? = null
+  private val modelCache: MutableMap<String, Model> = mutableMapOf()
+  private var cachedAllowlist: ModelAllowlist? = null
+  private var lastAllowlistSource: String = "unknown"
   private val logTag = "LlmHttpService"
   private val maxLogChars = 2000
   private val maxBodyBytes = 512 * 1024
@@ -65,6 +75,14 @@ class LlmHttpService : Service() {
     val port = intent?.getIntExtra(EXTRA_PORT, DEFAULT_PORT) ?: LlmHttpPrefs.getPort(this)
     currentPort = port
 
+    val model = pickDefaultLlmModel()
+    if (model == null) {
+      stopSelf()
+      return START_NOT_STICKY
+    }
+    defaultModel = model
+    modelCache[model.name] = model
+
     val notification: Notification =
       NotificationCompat.Builder(this, "llm-http")
         .setContentTitle("LLM HTTP Bridge")
@@ -73,19 +91,12 @@ class LlmHttpService : Service() {
         .build()
     startForeground(42, notification)
 
-    val model = pickFirstLlmModel()
-    if (model == null) {
-      stopSelf()
-      return START_NOT_STICKY
-    }
-    selectedModel = model
-
     server?.stop()
-    server = NanoServer(port, model)
+    server = NanoServer(port)
     server?.start()
 
     // Kick off a warm-up in background so the first real request is faster.
-    Thread { server?.warmUpModel() }.start()
+    Thread { server?.warmUpModel(model) }.start()
 
     return START_STICKY
   }
@@ -105,9 +116,9 @@ class LlmHttpService : Service() {
 
   override fun onBind(intent: Intent?): IBinder? = null
 
-  private fun pickFirstLlmModel(): Model? {
-    val allowlist = readAllowlistFromExternalFiles()
-    val base = allowlist?.models?.firstOrNull { allowed ->
+  private fun pickDefaultLlmModel(): Model? {
+    val allowlist = allowlistModels()
+    val base = allowlist.firstOrNull { allowed ->
       allowed.taskTypes.any { it.startsWith("llm", ignoreCase = true) }
     }?.toModel() ?: return null
 
@@ -119,12 +130,73 @@ class LlmHttpService : Service() {
   private fun readAllowlistFromExternalFiles(): ModelAllowlist? {
     return try {
       val baseDir = getExternalFilesDir(null)
-      val file = File(baseDir, "model_allowlist.json")
-      if (!file.exists()) return null
-      val content = file.readText()
-      Gson().fromJson(content, ModelAllowlist::class.java)
+      var file = File(baseDir, "model_allowlist.json")
+      if (!file.exists()) {
+        val fallbackDir = File("/sdcard/Android/data/${packageName}/files")
+        file = File(fallbackDir, "model_allowlist.json")
+      }
+      if (file.exists()) {
+        val content = file.readText()
+        val allowlist = Gson().fromJson(content, ModelAllowlist::class.java)
+        lastAllowlistSource = "external:${file.absolutePath}"
+        Log.i(logTag, "Loaded model_allowlist.json models=${allowlist?.models?.size ?: 0} source=$lastAllowlistSource")
+        return allowlist
+      }
+
+      // Fallback: bundled allowlist in assets.
+      val assetStream = assets.open("model_allowlist.json")
+      val assetText = InputStreamReader(assetStream).readText()
+      val allowlist = Gson().fromJson(assetText, ModelAllowlist::class.java)
+      lastAllowlistSource = "asset"
+      Log.i(logTag, "Loaded asset model_allowlist.json models=${allowlist?.models?.size ?: 0} source=$lastAllowlistSource")
+      allowlist
     } catch (e: Exception) {
+      lastAllowlistSource = "error"
+      Log.e(logTag, "Failed to read model_allowlist.json", e)
       null
+    }
+  }
+
+  private fun normalizeModelKey(value: String): String =
+    value.lowercase().replace(Regex("[^a-z0-9]"), "")
+
+  private fun allowlistModels(): List<AllowedModel> {
+    val fresh = readAllowlistFromExternalFiles()
+    if (fresh != null && fresh.models.isNotEmpty()) {
+      cachedAllowlist = fresh
+      return fresh.models
+    }
+    if (lastAllowlistSource == "unknown") {
+      lastAllowlistSource = "empty"
+    }
+    return cachedAllowlist?.models ?: emptyList()
+  }
+
+  private fun resolveModelId(requested: String?): String {
+    if (requested.isNullOrBlank()) return "local"
+    return requested
+  }
+
+  private fun selectModel(requestedModel: String?): Model? {
+    val requested = requestedModel?.trim().orEmpty()
+    if (requested.isEmpty() || requested.equals("local", ignoreCase = true) ||
+      requested.equals("default", ignoreCase = true)) {
+      return defaultModel
+    }
+
+    val key = normalizeModelKey(requested)
+    val allowlist = allowlistModels()
+    val allowed = allowlist.firstOrNull { model ->
+      normalizeModelKey(model.name) == key || normalizeModelKey(model.modelId) == key
+    }
+    if (allowed == null) return defaultModel
+
+    return modelCache.getOrPut(allowed.name) {
+      val base = allowed.toModel()
+      val importsDir = File(getExternalFilesDir(null), "__imports")
+      val namedImport = File(importsDir, "${allowed.name}.litertlm")
+      if (namedImport.exists()) base.copy(localModelFilePathOverride = namedImport.absolutePath)
+      else base
     }
   }
 
@@ -169,7 +241,7 @@ class LlmHttpService : Service() {
     }
   }
 
-  private inner class NanoServer(port: Int, private val model: Model) : NanoHTTPD(port) {
+  private inner class NanoServer(port: Int) : NanoHTTPD(port) {
     private val executor = Executors.newSingleThreadExecutor()
     private val inferenceLock = Any()
 
@@ -178,7 +250,8 @@ class LlmHttpService : Service() {
         when (session.method) {
           Method.GET -> when (session.uri) {
             "/ping" -> okJsonText("{\"status\":\"ok\"}")
-            "/v1/models" -> okJsonText(modelsPayload)
+            "/v1/models" -> okJsonText(modelsPayload())
+            "/debug/models" -> okJsonText(modelsPayload())
             else -> notFound()
           }
           Method.POST -> when (session.uri) {
@@ -209,10 +282,16 @@ class LlmHttpService : Service() {
 
       val req = json.decodeFromString<GenReq>(body)
       logPayload("POST /generate prompt", req.prompt, requestId)
+      val resolvedModel = selectModel(null) ?: return badRequest("llm error")
       logEvent(
-        "request_start id=$requestId endpoint=/generate bodyBytes=$bodyBytes promptChars=${req.prompt.length}"
+        "request_start id=$requestId endpoint=/generate bodyBytes=$bodyBytes promptChars=${req.prompt.length} model=default"
       )
-      val text = runLlm(req.prompt, requestId = requestId, endpoint = "/generate")
+      val text = runLlm(
+        model = resolvedModel,
+        prompt = req.prompt,
+        requestId = requestId,
+        endpoint = "/generate",
+      )
         ?: return badRequest("llm error")
       val res = GenRes(text = text, usage = Usage(prompt_tokens = 0, completion_tokens = 0))
       return okJsonText(json.encodeToString(res))
@@ -232,16 +311,22 @@ class LlmHttpService : Service() {
       logPayload("POST /v1/chat/completions raw", body, requestId)
 
       val req = json.decodeFromString<ChatRequest>(body)
+      if ((req.tools.isNullOrEmpty()) && req.tool_choice == "required") {
+        return badRequest("tool_choice required but tools empty")
+      }
       val prompt = req.messages.joinToString("\n") { it.content }
       logPayload("POST /v1/chat/completions prompt", prompt, requestId)
+      val requestedId = resolveModelId(req.model)
+      val resolvedModel = selectModel(req.model) ?: return badRequest("llm error")
+      val resolvedName = resolvedModel.name
       logEvent(
-        "request_start id=$requestId endpoint=/v1/chat/completions bodyBytes=$bodyBytes promptChars=${prompt.length}"
+        "request_start id=$requestId endpoint=/v1/chat/completions bodyBytes=$bodyBytes promptChars=${prompt.length} model=$requestedId resolved=$resolvedName"
       )
       if (prompt.isBlank()) {
         val fallback = ChatResponse(
           id = "chatcmpl-local",
           created = System.currentTimeMillis() / 1000,
-          model = req.model ?: "local-llm",
+          model = resolvedName,
           choices = listOf(
             ChatChoice(
               index = 0,
@@ -254,13 +339,39 @@ class LlmHttpService : Service() {
         logEvent("request_empty id=$requestId endpoint=/v1/chat/completions")
         return okJsonText(json.encodeToString(fallback))
       }
-      val text = runLlm(prompt, timeoutSeconds = 30, requestId = requestId, endpoint = "/v1/chat/completions")
+      // Tool-calls short path: if tools present and we are allowed to emit tool_calls
+      if (!req.tools.isNullOrEmpty() && req.tool_choice != "none") {
+        val toolCall = synthesizeToolCall(req, prompt)
+        val resp = ChatResponse(
+          id = "chatcmpl-local",
+          created = System.currentTimeMillis() / 1000,
+          model = resolvedName,
+          choices = listOf(
+            ChatChoice(
+              index = 0,
+              message = ChatMessage(role = "assistant", content = "", tool_calls = listOf(toolCall)),
+              finish_reason = "tool_calls",
+            )
+          ),
+          usage = Usage(prompt_tokens = 0, completion_tokens = 0),
+        )
+        logEvent("request_tool_call id=$requestId endpoint=/v1/chat/completions tool=${toolCall.function.name}")
+        return okJsonText(json.encodeToString(resp))
+      }
+
+      val text = runLlm(
+        model = resolvedModel,
+        prompt = prompt,
+        timeoutSeconds = 30,
+        requestId = requestId,
+        endpoint = "/v1/chat/completions",
+      )
         ?: return badRequest("llm error")
 
       val resp = ChatResponse(
         id = "chatcmpl-local",
         created = System.currentTimeMillis() / 1000,
-        model = req.model ?: "local-llm",
+        model = resolvedName,
         choices = listOf(
           ChatChoice(
             index = 0,
@@ -287,12 +398,18 @@ class LlmHttpService : Service() {
       logPayload("POST /v1/responses raw", body, requestId)
 
       val req = json.decodeFromString<ResponsesRequest>(body)
-      val modelId = req.model ?: "local"
+      if ((req.tools.isNullOrEmpty()) && req.tool_choice == "required") {
+        return badRequest("tool_choice required but tools empty")
+      }
+      val requestedId = resolveModelId(req.model)
+      val resolvedModel = selectModel(req.model) ?: return badRequest("llm error")
+      val resolvedName = resolvedModel.name
+      val modelId = resolvedName
       val prompt = extractText(req.messages ?: req.input)
 
       logPayload("POST /v1/responses prompt", prompt, requestId)
       logEvent(
-        "request_start id=$requestId endpoint=/v1/responses bodyBytes=$bodyBytes promptChars=${prompt.length}"
+        "request_start id=$requestId endpoint=/v1/responses bodyBytes=$bodyBytes promptChars=${prompt.length} model=$requestedId resolved=$resolvedName"
       )
 
       if (prompt.isBlank()) {
@@ -300,7 +417,34 @@ class LlmHttpService : Service() {
         return emptyResponse(modelId, stream = req.stream == true)
       }
 
-      val text = runLlm(prompt, timeoutSeconds = 90, requestId = requestId, endpoint = "/v1/responses")
+      // Tool-calls short path
+      if (!req.tools.isNullOrEmpty() && req.tool_choice != "none") {
+        val toolCall = synthesizeToolCallResponses(req, prompt)
+        val respBody = ResponsesResponse(
+          id = "resp-local",
+          created = System.currentTimeMillis() / 1000,
+          model = modelId,
+          output = listOf(
+            RespMessage(
+              role = "assistant",
+              content = listOf(RespContent(type = "output_tool_call", text = json.encodeToString(toolCall))),
+              finish_reason = "tool_calls",
+            )
+          ),
+          usage = Usage(prompt_tokens = 0, completion_tokens = 0),
+        )
+        val wantsStream = req.stream == true
+        if (wantsStream) return sseResponseToolCall(modelId, toolCall)
+        return okJsonText(json.encodeToString(respBody))
+      }
+
+      val text = runLlm(
+        model = resolvedModel,
+        prompt = prompt,
+        timeoutSeconds = 90,
+        requestId = requestId,
+        endpoint = "/v1/responses",
+      )
         ?: return badRequest("llm error")
 
       val respBody = ResponsesResponse(
@@ -324,8 +468,8 @@ class LlmHttpService : Service() {
     }
 
     // Warm up the model once after service start to reduce first-token latency.
-    fun warmUpModel() {
-      runLlm("Hola", timeoutSeconds = 10, requestId = "warmup", endpoint = "warmup")
+    fun warmUpModel(model: Model) {
+      runLlm(model = model, prompt = "Hola", timeoutSeconds = 10, requestId = "warmup", endpoint = "warmup")
     }
 
     private fun extractText(msgs: List<InputMsg>?): String {
@@ -341,7 +485,34 @@ class LlmHttpService : Service() {
       return lastUserText ?: ""
     }
 
+    private fun synthesizeToolCall(req: ChatRequest, prompt: String): ToolCall {
+      val tool = req.tools!!.first()
+      val function = tool.function
+      val argsObj = JsonObject(mapOf("query" to JsonPrimitive(prompt)))
+      return ToolCall(
+        id = "call_${System.currentTimeMillis()}",
+        function = ToolCallFunction(
+          name = function.name,
+          arguments = json.encodeToString(argsObj),
+        ),
+      )
+    }
+
+    private fun synthesizeToolCallResponses(req: ResponsesRequest, prompt: String): ToolCall {
+      val tool = req.tools!!.first()
+      val function = tool.function
+      val argsObj = JsonObject(mapOf("query" to JsonPrimitive(prompt)))
+      return ToolCall(
+        id = "call_${System.currentTimeMillis()}",
+        function = ToolCallFunction(
+          name = function.name,
+          arguments = json.encodeToString(argsObj),
+        ),
+      )
+    }
+
     private fun runLlm(
+      model: Model,
       prompt: String,
       timeoutSeconds: Long = 30,
       requestId: String,
@@ -394,14 +565,14 @@ class LlmHttpService : Service() {
       val completed = latch.await(timeoutSeconds, TimeUnit.SECONDS)
       if (!completed) {
         error = "timeout"
-        cancelInference(requestId = requestId, endpoint = endpoint, reason = "timeout")
+        cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "timeout")
         LlmChatModelHelper.resetConversation(
           model = model,
           supportImage = false,
           supportAudio = false,
         )
       } else if (error != null) {
-        cancelInference(requestId = requestId, endpoint = endpoint, reason = "error")
+        cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "error")
       }
       val totalMs = SystemClock.elapsedRealtime() - startMs
       val ttfbMs = firstTokenMs?.toString() ?: "-1"
@@ -419,7 +590,7 @@ class LlmHttpService : Service() {
       }
     }
 
-    private fun cancelInference(requestId: String, endpoint: String, reason: String) {
+    private fun cancelInference(model: Model, requestId: String, endpoint: String, reason: String) {
       val instance = model.instance as? LlmModelInstance ?: return
       try {
         instance.conversation.cancelProcess()
@@ -459,6 +630,41 @@ class LlmHttpService : Service() {
         append(emit("response.content_part.added", partAdded))
         append(emit("response.output_text.delta", delta))
         append(emit("response.output_text.done", deltaDone))
+        append(emit("response.content_part.done", partDone))
+        append(emit("response.output_item.done", itemDone))
+        append(emit("response.completed", completed))
+        append("data: [DONE]\n\n")
+      }
+
+      val input = ByteArrayInputStream(ssePayload.toByteArray(Charsets.UTF_8))
+      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", input)
+      resp.addHeader("Cache-Control", "no-cache")
+      resp.addHeader("Connection", "keep-alive")
+      return resp
+    }
+
+    private fun sseResponseToolCall(modelId: String, toolCall: ToolCall): Response {
+      val now = System.currentTimeMillis() / 1000
+      val respId = "resp-$now"
+      val msgId = "msg-$now"
+
+      fun emit(event: String, payload: String): String = "event: $event\n" + "data: $payload\n\n"
+
+      val toolJson = json.encodeToString(toolCall)
+
+      val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
+      val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
+      val itemAdded = """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""
+      val partAdded = """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_tool_call","tool_call":$toolJson}}"""
+      val partDone = """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_tool_call","tool_call":$toolJson}}"""
+      val itemDone = """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_tool_call","tool_call":$toolJson}],"role":"assistant"},"output_index":0}"""
+      val completed = """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_tool_call","tool_call":$toolJson}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""
+
+      val ssePayload = buildString {
+        append(emit("response.created", created))
+        append(emit("response.in_progress", inProgress))
+        append(emit("response.output_item.added", itemAdded))
+        append(emit("response.content_part.added", partAdded))
         append(emit("response.content_part.done", partDone))
         append(emit("response.output_item.done", itemDone))
         append(emit("response.completed", completed))
@@ -544,9 +750,25 @@ class LlmHttpService : Service() {
       )
   }
 
+  private fun modelsPayload(): String {
+    val allowed = allowlistModels()
+    if (allowed.isEmpty()) {
+      val fallbackId = defaultModel?.name ?: "local"
+      Log.w(logTag, "Models list empty. source=$lastAllowlistSource fallback=$fallbackId")
+      return json.encodeToString(ModelList(data = listOf(ModelItem(id = fallbackId))))
+    }
+    Log.i(logTag, "Models list size=${allowed.size} source=$lastAllowlistSource")
+    val models = allowed.map { item -> ModelItem(id = item.name) }
+    return json.encodeToString(ModelList(data = models))
+  }
+
   @Serializable data class GenReq(val prompt: String)
 
   @Serializable data class Usage(val prompt_tokens: Int, val completion_tokens: Int)
+
+  @Serializable data class ModelItem(val id: String, val `object`: String = "model")
+
+  @Serializable data class ModelList(val `object`: String = "list", val data: List<ModelItem>)
 
   // Responses API minimal models
   @Serializable data class ResponsesRequest(
@@ -554,6 +776,8 @@ class LlmHttpService : Service() {
     val input: List<InputMsg>? = null,
     val messages: List<InputMsg>? = null,
     val stream: Boolean? = null,
+    val tools: List<ToolSpec>? = null,
+    val tool_choice: String? = null,
   )
   @Serializable data class InputMsg(
     val role: String,
@@ -583,12 +807,26 @@ class LlmHttpService : Service() {
 
   @Serializable data class GenRes(val text: String, val usage: Usage)
 
-  @Serializable data class ChatMessage(val role: String, val content: String)
+  @Serializable data class ChatMessage(
+    val role: String,
+    val content: String,
+    val tool_calls: List<ToolCall>? = null,
+  )
+  @Serializable data class ToolCallFunction(val name: String, val arguments: String)
+  @Serializable data class ToolCall(val id: String, val type: String = "function", val function: ToolCallFunction)
+  @Serializable data class ToolFunctionDef(
+    val name: String,
+    val description: String? = null,
+    val parameters: JsonElement? = null,
+  )
+  @Serializable data class ToolSpec(val type: String = "function", val function: ToolFunctionDef)
 
   @Serializable data class ChatRequest(
     val model: String? = null,
     val messages: List<ChatMessage> = emptyList(),
     val stream: Boolean? = null,
+    val tools: List<ToolSpec>? = null,
+    val tool_choice: String? = null,
   )
 
   @Serializable data class ChatChoice(

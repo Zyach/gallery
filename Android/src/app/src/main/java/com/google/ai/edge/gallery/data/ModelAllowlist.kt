@@ -33,7 +33,8 @@ data class AllowedModel(
   val modelFile: String,
   val description: String,
   val sizeInBytes: Long,
-  val commitHash: String,
+  val commitHash: String? = null,
+  @SerializedName("version") val version: String? = null,
   val defaultConfig: DefaultConfig,
   val taskTypes: List<String>,
   val disabled: Boolean? = null,
@@ -46,9 +47,11 @@ data class AllowedModel(
   val url: String? = null,
 ) {
   fun toModel(): Model {
+    val resolvedCommit =
+      commitHash?.takeIf { it.isNotBlank() } ?: version?.takeIf { it.isNotBlank() } ?: "unknown"
     // Construct HF download url.
     val downloadUrl =
-      url ?: "https://huggingface.co/$modelId/resolve/$commitHash/$modelFile?download=true"
+      url ?: "https://huggingface.co/$modelId/resolve/$resolvedCommit/$modelFile?download=true"
 
     // Config.
     val isLlmModel =
@@ -96,7 +99,7 @@ data class AllowedModel(
 
     return Model(
       name = name,
-      version = commitHash,
+      version = resolvedCommit,
       info = description,
       url = downloadUrl,
       sizeInBytes = sizeInBytes,
