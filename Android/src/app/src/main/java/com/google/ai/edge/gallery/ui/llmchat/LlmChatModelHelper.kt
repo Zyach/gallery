@@ -114,8 +114,12 @@ object LlmChatModelHelper {
       Log.w(TAG, "Low memory detected. Reducing max tokens from $maxTokens to $effectiveMaxTokens")
     }
     val supportsCpu = modelSupportsAccelerator(model, Accelerator.CPU)
+    val supportsGpu = modelSupportsAccelerator(model, Accelerator.GPU)
+    val supportsNpu = modelSupportsAccelerator(model, Accelerator.NPU)
+    val fallbackEnabled =
+      com.google.ai.edge.gallery.data.LlmHttpPrefs.isAcceleratorFallbackEnabled(context)
     val effectiveAccelerator =
-      if (isLowMemory && accelerator == Accelerator.GPU.label && supportsCpu) {
+      if (fallbackEnabled && isLowMemory && accelerator == Accelerator.GPU.label && supportsCpu) {
         Log.w(TAG, "Low memory detected. Falling back from GPU to CPU backend")
         Accelerator.CPU.label
       } else {
@@ -125,32 +129,63 @@ object LlmChatModelHelper {
     val shouldEnableImage = supportImage
     val shouldEnableAudio = supportAudio
     Log.d(TAG, "Enable image: $shouldEnableImage, enable audio: $shouldEnableAudio")
-    val preferredBackend =
+    val preferredOrder =
       when (effectiveAccelerator) {
-        Accelerator.CPU.label -> Backend.CPU
-        Accelerator.GPU.label -> Backend.GPU
-        else -> Backend.CPU
+        Accelerator.NPU.label ->
+          if (fallbackEnabled) listOf(Backend.NPU, Backend.GPU, Backend.CPU) else listOf(Backend.NPU)
+        Accelerator.GPU.label ->
+          if (fallbackEnabled) listOf(Backend.GPU, Backend.CPU) else listOf(Backend.GPU)
+        else -> listOf(Backend.CPU)
       }
-    Log.d(TAG, "Preferred backend: $preferredBackend")
+    val supportedOrder =
+      if (fallbackEnabled) {
+        preferredOrder.filter {
+          when (it) {
+            Backend.NPU -> supportsNpu
+            Backend.GPU -> supportsGpu
+            Backend.CPU -> supportsCpu
+          }
+        }.ifEmpty { listOf(Backend.CPU) }
+      } else {
+        preferredOrder
+      }
+    Log.d(TAG, "Preferred backend order: $supportedOrder")
 
     val modelPath = model.getPath(context = context)
-    val engineConfig =
-      EngineConfig(
-        modelPath = modelPath,
-        backend = preferredBackend,
-        visionBackend = if (shouldEnableImage) Backend.GPU else null, // must be GPU for Gemma 3n
-        audioBackend = if (shouldEnableAudio) Backend.CPU else null, // must be CPU for Gemma 3n
-        maxNumTokens = effectiveMaxTokens,
-        cacheDir =
-          if (modelPath.startsWith("/data/local/tmp"))
-            context.getExternalFilesDir(null)?.absolutePath
-          else null,
-      )
-
-    // Create an instance of LiteRT LM engine and conversation.
+    // Create an instance of LiteRT LM engine and conversation with backend fallback.
     try {
-      val engine = Engine(engineConfig)
-      engine.initialize()
+      var lastError: Exception? = null
+      var engine: Engine? = null
+      var usedBackend: Backend? = null
+      for (backend in supportedOrder) {
+        try {
+          val engineConfig =
+            EngineConfig(
+              modelPath = modelPath,
+              backend = backend,
+              visionBackend = if (shouldEnableImage) Backend.GPU else null, // must be GPU for Gemma 3n
+              audioBackend = if (shouldEnableAudio) Backend.CPU else null, // must be CPU for Gemma 3n
+              maxNumTokens = effectiveMaxTokens,
+              cacheDir =
+                if (modelPath.startsWith("/data/local/tmp"))
+                  context.getExternalFilesDir(null)?.absolutePath
+                else null,
+            )
+          val candidate = Engine(engineConfig)
+          candidate.initialize()
+          engine = candidate
+          usedBackend = backend
+          break
+        } catch (e: Exception) {
+          lastError = e
+          Log.w(TAG, "Backend $backend failed, trying next...", e)
+        }
+      }
+      if (engine == null) {
+        onDone(cleanUpMediapipeTaskErrorMessage(lastError?.message ?: "Unknown error"))
+        return
+      }
+      Log.d(TAG, "Using backend: $usedBackend")
 
       ExperimentalFlags.enableConversationConstrainedDecoding =
         enableConversationConstrainedDecoding

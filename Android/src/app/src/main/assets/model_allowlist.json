@@ -42,17 +42,18 @@
     {
       "name": "Gemma3-1B-IT",
       "modelId": "litert-community/Gemma3-1B-IT",
-      "modelFile": "gemma3-1b-it-int4.litertlm",
+      "modelFile": "Gemma3-1B-IT_q4_ekv1280_sm8550.litertlm",
       "description": "A variant of [google/Gemma-3-1B-IT](https://huggingface.co/google/Gemma-3-1B-IT) with 4-bit quantization ready for deployment on Android using [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md).",
       "sizeInBytes": 584417280,
       "minDeviceMemoryInGb": 6,
       "commitHash": "42d538a932e8d5b12e6b3b455f5572560bd60b2c",
+      "url": "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_q4_ekv1280_sm8550.litertlm?download=true",
       "defaultConfig": {
         "topK": 64,
         "topP": 0.95,
         "temperature": 1.0,
         "maxTokens": 1024,
-        "accelerators": "gpu,cpu"
+        "accelerators": "npu,gpu,cpu"
       },
       "taskTypes": ["llm_chat", "llm_prompt_lab"],
       "bestForTaskTypes": ["llm_chat", "llm_prompt_lab"]

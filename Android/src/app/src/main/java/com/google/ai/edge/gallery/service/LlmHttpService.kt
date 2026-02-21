@@ -118,9 +118,10 @@ class LlmHttpService : Service() {
 
   private fun pickDefaultLlmModel(): Model? {
     val allowlist = allowlistModels()
-    val base = allowlist.firstOrNull { allowed ->
+    val preferred = allowlist.firstOrNull { it.name == "Gemma3-1B-IT" }
+    val base = (preferred ?: allowlist.firstOrNull { allowed ->
       allowed.taskTypes.any { it.startsWith("llm", ignoreCase = true) }
-    }?.toModel() ?: return null
+    })?.toModel() ?: return null
 
     // If user imported model into __imports, prefer that path.
     val imported = File(getExternalFilesDir(null), "__imports/gemma-3n-E2B-it-int4.litertlm")

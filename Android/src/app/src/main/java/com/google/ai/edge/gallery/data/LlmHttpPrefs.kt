@@ -7,9 +7,11 @@ private const val KEY_ENABLED = "enabled"
 private const val KEY_PORT = "port"
 private const val KEY_HISTORY_ENABLED = "history_enabled"
 private const val KEY_PAYLOAD_LOGGING_ENABLED = "payload_logging_enabled"
+private const val KEY_ACCELERATOR_FALLBACK_ENABLED = "accelerator_fallback_enabled"
 private const val DEFAULT_PORT = 9006
 private const val DEFAULT_HISTORY_ENABLED = false
 private const val DEFAULT_PAYLOAD_LOGGING_ENABLED = false
+private const val DEFAULT_ACCELERATOR_FALLBACK_ENABLED = true
 
 object LlmHttpPrefs {
   fun isEnabled(context: Context): Boolean =
@@ -26,6 +28,10 @@ object LlmHttpPrefs {
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
       .getBoolean(KEY_PAYLOAD_LOGGING_ENABLED, DEFAULT_PAYLOAD_LOGGING_ENABLED)
 
+  fun isAcceleratorFallbackEnabled(context: Context): Boolean =
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      .getBoolean(KEY_ACCELERATOR_FALLBACK_ENABLED, DEFAULT_ACCELERATOR_FALLBACK_ENABLED)
+
   fun setHistoryEnabled(context: Context, enabled: Boolean) {
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
       .edit()
@@ -37,6 +43,13 @@ object LlmHttpPrefs {
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
       .edit()
       .putBoolean(KEY_PAYLOAD_LOGGING_ENABLED, enabled)
+      .apply()
+  }
+
+  fun setAcceleratorFallbackEnabled(context: Context, enabled: Boolean) {
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      .edit()
+      .putBoolean(KEY_ACCELERATOR_FALLBACK_ENABLED, enabled)
       .apply()
   }
 

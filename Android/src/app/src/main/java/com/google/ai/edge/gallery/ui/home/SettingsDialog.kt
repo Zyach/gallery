@@ -117,6 +117,9 @@ fun SettingsDialog(
   var payloadLoggingEnabled by remember {
     mutableStateOf(LlmHttpPrefs.isPayloadLoggingEnabled(context))
   }
+  var acceleratorFallbackEnabled by remember {
+    mutableStateOf(LlmHttpPrefs.isAcceleratorFallbackEnabled(context))
+  }
 
   Dialog(onDismissRequest = onDismissed) {
     val focusManager = LocalFocusManager.current
@@ -257,6 +260,16 @@ fun SettingsDialog(
                 enabled = httpEnabled,
               )
               Text("Loggear payloads HTTP", style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+              androidx.compose.material3.Switch(
+                checked = acceleratorFallbackEnabled,
+                onCheckedChange = { checked ->
+                  acceleratorFallbackEnabled = checked
+                  LlmHttpPrefs.setAcceleratorFallbackEnabled(context, checked)
+                },
+              )
+              Text("Fallback automático acelerador (NPU→GPU→CPU)", style = MaterialTheme.typography.bodyMedium)
             }
             Text(
               "Every Code puede llamar a http://127.0.0.1:<puerto>/generate",
