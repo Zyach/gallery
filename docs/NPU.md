@@ -26,13 +26,13 @@ LiteRT-LM supports running LLMs using NPU acceleration with the following vendor
 Download a`.litertlm`matching your SoC (examples below). You can query your device SoC:  
 
     SOC_MODEL=$(adb shell getprop ro.soc.model | tr '[:upper:]' '[:lower:]')
-    echo "https://huggingface.co/litert-community/Gemma3-1B-IT/blob/main/Gemma3-1B-IT_q4_ekv1280_${SOC_MODEL}.litertlm"
+    echo "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_q4_ekv1280_${SOC_MODEL}.litertlm"
 
 |   Model   |  SoC   |   Quantization    | Context size | Model Size (MB) |                                                      Download                                                      |
 |-----------|--------|-------------------|--------------|-----------------|--------------------------------------------------------------------------------------------------------------------|
-| Gemma3-1B | SM8750 | 4-bit per-channel | 1280         | 658             | [download](https://huggingface.co/litert-community/Gemma3-1B-IT/blob/main/Gemma3-1B-IT_q4_ekv1280_sm8750.litertlm) |
-| Gemma3-1B | SM8650 | 4-bit per-channel | 1280         | 658             | [download](https://huggingface.co/litert-community/Gemma3-1B-IT/blob/main/Gemma3-1B-IT_q4_ekv1280_sm8650.litertlm) |
-| Gemma3-1B | SM8550 | 4-bit per-channel | 1280         | 657             | [download](https://huggingface.co/litert-community/Gemma3-1B-IT/blob/main/Gemma3-1B-IT_q4_ekv1280_sm8550.litertlm) |
+| Gemma3-1B | SM8750 | 4-bit per-channel | 1280         | 658             | [download](https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_q4_ekv1280_sm8750.litertlm) |
+| Gemma3-1B | SM8650 | 4-bit per-channel | 1280         | 658             | [download](https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_q4_ekv1280_sm8650.litertlm) |
+| Gemma3-1B | SM8550 | 4-bit per-channel | 1280         | 657             | [download](https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_q4_ekv1280_sm8550.litertlm) |
 
 <br />
 

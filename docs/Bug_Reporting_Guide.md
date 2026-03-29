@@ -28,9 +28,13 @@ It's best to capture the report **immediately after** you've experienced the bug
 
 #### **3\. Wait and Share**
 
+> [!WARNING]
+> A **Full bug report** may contain sensitive information such as device identifiers, installed apps, recent logs, URLs, and tokens. **Do not post the full `.zip` on a public GitHub issue.**
+> If the issue is public, say that you can share the full report privately and wait for maintainer instructions. Share only redacted excerpts publicly when necessary.
+
 * Your phone will take a moment to collect all the data. When it's ready, a notification will appear saying **"Bug report captured"**.  
 * Tap this notification.  
-* The Android share menu will open. You can now share the `.zip` file with us. The easiest way is to **save it to your Google Drive** and share the link, or attach it directly to the GitHub issue.
+* The Android share menu will open. Save the `.zip` and share it only through a **private channel** requested by maintainers, such as a restricted Drive link.
 
 ### **Part 2: For Developers & Advanced Users (Using ADB)**
 
