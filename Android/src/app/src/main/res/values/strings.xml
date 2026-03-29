@@ -46,19 +46,6 @@
   <string name="confirm_delete_model_dialog_content" translatable="false">Are you sure you want to delete the downloaded model \"%s\"?</string>
   <string name="conversation_reset_message" translatable="false">Conversation was reset</string>
   <string name="engin_reset_message" translatable="false">Engine was reset</string>
-  <string name="chat_history_title" translatable="false">Chat History</string>
-  <string name="chat_history_export" translatable="false">Export</string>
-  <string name="chat_history_import" translatable="false">Import</string>
-  <string name="chat_history_clear_all" translatable="false">Clear all</string>
-  <string name="chat_history_clear_all_title" translatable="false">Clear all history?</string>
-  <string name="chat_history_clear_all_body" translatable="false">This will remove all stored chat history and attachments.</string>
-  <string name="chat_history_clear_all_confirm" translatable="false">Clear all</string>
-  <string name="chat_history_clear_all_cancel" translatable="false">Cancel</string>
-  <string name="chat_history_empty" translatable="false">No chat history yet.</string>
-  <string name="chat_history_working" translatable="false">Working…</string>
-  <string name="chat_history_filter_task" translatable="false">Task</string>
-  <string name="chat_history_filter_model" translatable="false">Model</string>
-  <string name="chat_history_filter_all" translatable="false">All</string>
   <string name="notification_title_success" translatable="false">Model download succeeded</string>
   <string name="notification_content_success" translatable="false">Model \"%s\" has been downloaded</string>
   <string name="notification_title_fail" translatable="false">Model download failed</string>
@@ -72,6 +59,37 @@
   <string name="learn_more" translatable="false">Learn more</string>
   <string name="litert_community_label" translatable="false">LiteRT community</string>
   <string name="loading_model_list" translatable="false">Loading model list...</string>
+  <string name="all" translatable="false">All</string>
+  <string name="baseline" translatable="false">Baseline</string>
+  <string name="basic_info" translatable="false">Basic info</string>
+  <string name="benchmark" translatable="false">Benchmark</string>
+  <string name="benchmark_comparison_help_title" translatable="false">How to compare benchmark runs</string>
+  <string name="benchmark_comparison_help_content" translatable="false">Compare benchmark runs by tapping the **Baseline** chip on any run result card to set the run as the comparison baseline. We\'ll automatically calculate and display the percentage differences in **all other** run result cards.</string>
+  <string name="benchmark_model" translatable="false">Benchmark model</string>
+  <string name="benchmark_results" translatable="false">Benchmark results</string>
+  <string name="benchmark_no_results" translatable="false">No benchmark results</string>
+  <string name="benchmark_tokens_limit_message" translatable="false">Ensure that the sum of prefill and decode tokens remains under the model\'s maximum token limit (%d vs %d)</string>
+  <string name="collapse_all" translatable="false">Collapse all</string>
+  <string name="continue_button_label" translatable="false">Continue</string>
+  <string name="copy" translatable="false">Copy</string>
+  <string name="delete" translatable="false">Delete</string>
+  <string name="delete_benchmark_result_dialog_title" translatable="false">Delete benchmark result</string>
+  <string name="delete_benchmark_result_dialog_content" translatable="false">Are you sure you want to delete the benchmark result?</string>
+  <string name="dismiss" translatable="false">Dismiss</string>
+  <string name="expand_all" translatable="false">Expand all</string>
+  <string name="results" translatable="false">Results</string>
+  <string name="run_benchmark" translatable="false">Run benchmark</string>
+  <string name="run_benchmark_confirmation_msg" translatable="false">This process typically takes several minutes and cannot be interrupted once started. Would you like to proceed?</string>
+  <string name="running_benchmark_msg" translatable="false">Running model benchmark...</string>
+  <string name="select_downloaded_model" translatable="false">Select a downloaded model</string>
+  <string name="select_model" translatable="false">Select a model</string>
+  <string name="tap_to_see_value" translatable="false">Tap on graph to see value</string>
+  <string name="view_results" translatable="false">View results</string>
+
+  <plurals name="runs" translatable="false">
+    <item quantity="one">%d run</item>
+    <item quantity="other">%d runs</item>
+  </plurals>
   <string name="memory_warning_title" translatable="false">Memory Warning</string>
   <string name="memory_warning_content" translatable="false">The model you\'ve selected may exceed your device\'s memory, which can cause the app to crash. For the best experience, we recommend trying a smaller model.</string>
   <string name="memory_warning_proceed_anyway" translatable="false">Proceed anyway</string>
@@ -89,7 +107,6 @@
   <string name="tos_dialog_view_accept_button_label" translatable="false">Accept &amp; Continue</string>
   <string name="try_it" translatable="false">Try it</string>
   <string name="run_again" translatable="false">Run again</string>
-  <string name="benchmark" translatable="false">Run benchmark</string>
   <string name="warming_up" translatable="false">warming up…</string>
   <string name="running" translatable="false">running</string>
   <string name="enter_instruction" translatable="false">Enter instruction</string>
@@ -114,6 +131,7 @@
   <string name="conversation_history" translatable="false">Conversation History</string>
   <string name="warning_no_function_call" translatable="false">No function recognized</string>
   <string name="snackbar_no_function_call" translatable="false">No function recognized</string>
+  <string name="show_thinking" translatable="false">Show thinking</string>
   <string name="unknown_error" translatable="false">Unknown error</string>
 
   <string name="function_name" translatable="false">Function name</string>
@@ -156,7 +174,6 @@
   <string name="cd_navigate_back_icon">Go back</string>
   <!-- Content description spoken when the settings icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_app_settings_icon">Settings</string>
-  <string name="cd_chat_history_icon">Chat history</string>
   <!-- Content description spoken when the done icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_done_icon">Done</string>
   <!-- Content description spoken when the collapse icon is focused. [CHAR_LIMIT=NONE] -->
@@ -167,7 +184,6 @@
   <string name="cd_stop_icon">Stop</string>
   <!-- Content description spoken when the delete icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_delete_icon">Delete</string>
-  <string name="cd_chat_history_delete">Delete chat history session</string>
   <!-- Content description spoken when the close icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_close_icon">Close</string>
   <!-- Content description spoken when the selected icon is focused. [CHAR_LIMIT=NONE] -->

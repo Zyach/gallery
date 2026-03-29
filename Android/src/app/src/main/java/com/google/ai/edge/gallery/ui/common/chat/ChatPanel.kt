@@ -355,6 +355,12 @@ fun ChatPanel(
                     },
                   )
 
+                // Thinking trace.
+                is ChatMessageThinking -> MessageBodyThinking(
+                  thinkingText = message.content,
+                  inProgress = message.inProgress,
+                )
+
                 // Non-system messages.
                 else -> {
                   // The bubble shape around the message body.
@@ -423,6 +429,13 @@ fun ChatPanel(
                         MessageBodyBenchmarkLlm(
                           message = message,
                           modifier = Modifier.wrapContentWidth(),
+                        )
+
+                      // Thinking trace.
+                      is ChatMessageThinking ->
+                        MessageBodyThinking(
+                          thinkingText = message.content,
+                          inProgress = message.inProgress,
                         )
 
                       else -> {}
@@ -520,7 +533,7 @@ fun ChatPanel(
                       // Benchmark button
                       if (selectedModel.showBenchmarkButton) {
                         MessageActionButton(
-                          label = stringResource(R.string.benchmark),
+                          label = stringResource(R.string.run_benchmark),
                           icon = Icons.Outlined.Timer,
                           onClick = {
                             showBenchmarkConfigsDialog = true
