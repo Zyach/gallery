@@ -28,6 +28,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +60,8 @@ import kotlin.math.pow
 import kotlinx.coroutines.delay
 
 private const val TAG = "AGUtils"
+
+val SMALL_BUTTON_CONTENT_PADDING = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
 
 /** Format the bytes into a human-readable format. */
 fun Long.humanReadableSize(si: Boolean = true, extraDecimalForGbAndAbove: Boolean = false): String {
