@@ -1,87 +1,63 @@
-# backlog — gallery
+# backlog — gallery fork
 
-> Cola viva y priorizada del fork.
-> Alineada con `docs/STATE.md` y `docs/ROADMAP.md`.
 > Ultima actualizacion: 2026-03-30.
 
 ---
 
-## Criterio de priorizacion
+## Prioridades
 
-- `P0`: bloquea build, CI, validacion o invariantes del fork.
-- `P1`: no bloquea hoy, pero compromete la siguiente iteracion si se pospone.
-- `P2`: mejora de robustez, limpieza o preparacion de batches futuros.
-
----
-
-## P0 — Hacer ahora
-
-- [x] `DOC-01` Corregir referencias documentales rotas en entrada principal.
-  - DoD: `README.md` apunta solo a documentos existentes en `docs/`.
-
-- [x] `BUILD-01` Resolver errores de build evidentes del lote actual.
-  - DoD: `:app:assembleDebug` pasa o deja bloqueos exactos documentados.
-
-- [x] `RES-01` Eliminar el conflicto de recursos por `benchmark` duplicado.
-  - DoD: no hay claves duplicadas en `strings.xml` que rompan merge/aapt.
-
-- [ ] `THINK-01` Verificar la cadena completa de thinking mode.
-  - DoD: los partial thinking chunks llegan al estado/UI y el panel no se autoexpande de forma incorrecta.
-
-- [x] `NAV-01` Asegurar que la retirada de chat history no deja navegacion muerta ni imports colgantes.
-  - DoD: sin referencias activas a `ui/history` ni `data/chathistory`.
+- `P0`: bloquea build, CI, invariantes o seguridad.
+- `P1`: compromete la siguiente iteración si se pospone.
+- `P2`: preparación de batches futuros.
 
 ---
 
-## P1 — Siguiente sprint
+## P0
 
-- [ ] `RUNTIME-01` Completar la migracion a `model.runtimeHelper` en los flujos que queden legacy.
-  - DoD: firmas alineadas en chat, single-turn, Mobile Actions y Tiny Garden.
-
-- [ ] `BENCH-01` Decidir la exposicion de benchmark al usuario.
-  - DoD: benchmark queda cableado a navegacion/home o explicitamente desactivado/documentado.
-
-- [ ] `BENCH-02` Corregir parseos sensibles a locale en benchmark.
-  - DoD: no se parsean strings formateados mediante `toDouble()` en rutas de UI/resultados.
-
-- [ ] `HTTP-01` Ejecutar smoke tests del puente local.
-  - DoD: `/ping`, `/v1/models`, `/generate` y `/v1/chat/completions` responden en loopback.
-
-- [ ] `DOC-02` Dejar una nota corta de divergencias deliberadas del fork respecto a upstream.
-  - DoD: las diferencias intencionales quedan resumidas y enlazables.
+- [x] `SEC-01` Bind NanoHTTPD a 127.0.0.1
+- [x] `SEC-02` Auth Bearer token en HTTP API
+- [ ] `SEC-03` Inferencia HTTP stateless (reset por request)
+- [x] `SEC-04` Errores JSON estructurados en HTTP
+- [x] `SEC-05` Payload logging solo opt-in
+- [x] `ERR-01` Fix error silencioso en LlmSingleTurnViewModel
+- [x] `ERR-02` Cap retry loop en resetSession (max 5)
+- [x] `THINK-01` Parseo de `<think>` tags en LlmChatModelHelper
 
 ---
 
-## P2 — Preparacion de siguientes lotes
+## P1
 
-- [ ] `SYNC-01` Agrupar el catch-up restante por lotes pequenos tematicos.
-  - DoD: cada lote tiene objetivo, riesgo y validacion de salida.
+- [ ] `TEST-02` 15-20 tests JVM
+- [x] `CI-01` CI: tests + lint + release build
+- [x] `HTTP-02` Rechazar model IDs desconocidos con 404
+- [ ] `RUNTIME-01` Completar migración runtimeHelper
+- [ ] `HTTP-01` Smoke tests del puente local
+- [x] `DOC-02` Divergencias deliberadas documentadas
 
-- [ ] `UX-01` Revisar superficies home/settings tras la retirada de chat history.
-  - DoD: sin affordances confusas ni opciones huerfanas.
+---
 
-- [ ] `TEST-01` Definir una receta minima de validacion local del fork.
-  - DoD: build, CI y smoke HTTP quedan descritos en orden de ejecucion.
+## P2
 
-- [ ] `DOC-03` Evaluar si hace falta un `docs/CHANGELOG.md` o un indice documental ligero.
-  - DoD: decision tomada y consistente con el tamano real del proyecto.
+- [ ] `ARCH-01` Extraer LlmHttpService en componentes
+- [ ] `ARCH-02` Unificar allowlist app/servicio
+- [ ] `ARCH-03` Estandarizar kotlinx.serialization
+- [ ] `STREAM-01` SSE streaming real
+- [ ] `PERF-01` Eliminar runBlocking en DataStoreRepository
+- [ ] `BUILD-02` Release signing + minify
 
 ---
 
 ## Hecho en este ciclo
 
-- [x] `DOC-00` Recentrar la documentacion viva en `docs/`.
-- [x] `DOC-00b` Crear `STATE`, `ROADMAP` y `backlog` como trio base del proyecto.
-- [x] `ITER-01a` Corregir duplicados de `benchmark` y `close` en recursos y revalidar build local.
-- [x] `ITER-01b` Confirmar por inspeccion que no quedan referencias Kotlin activas a chat history eliminado.
-
----
-
-## Siguiente iteracion sugerida
-
-La siguiente iteracion deberia centrarse en cerrar el lote tecnico actual antes de abrir otro:
-
-1. thinking/runtime wiring;
-2. benchmark y navegacion;
-3. smoke tests del puente HTTP;
-4. validacion funcional en dispositivo/emulador.
+- [x] Bind loopback explícito (SEC-01)
+- [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
+- [x] 404 para model IDs desconocidos (HTTP-02)
+- [x] Errores JSON (SEC-04)
+- [x] Payload logging opt-in (SEC-05)
+- [x] Fix error single-turn (ERR-01)
+- [x] Cap retry (ERR-02)
+- [x] CI upgrade: tests + lint + release (CI-01)
+- [x] Thinking mode E2E (THINK-01)
+- [x] Doc divergencias (DOC-02)
+- [x] Informe de consultoría multi-rol
+- [x] Documentación simplificada y consolidada

@@ -2,6 +2,14 @@
 
 ## Propósito
 Google AI Edge Gallery — app Android para modelos on-device (fork/estudio).
+Version estimada: 0.3.0-alpha. Madurez: 38%.
+
+## Documentación viva
+- Estado: `docs/STATE.md`
+- Roadmap: `docs/ROADMAP.md`
+- Backlog: `docs/backlog.md`
+- Divergencias: `docs/FORK_DIVERGENCES.md`
+- Consultoría: `docs/INFORME_CONSULTORIA_2026-03-30.md`
 
 ## Control plane (read-only)
 - SITEMAP: `~/agent-core/SITEMAP.json` (leer, nunca escribir)
@@ -32,3 +40,26 @@ Google AI Edge Gallery — app Android para modelos on-device (fork/estudio).
 - Mostrar diff antes de editar.
 - Confirmar antes de borrar archivos o ejecutar comandos con side_effects != "none".
 - Iteración 1 en modo auto; escalar si hay ambigüedad.
+
+## Tickets de sistema (obligatorio ante errores de stack)
+
+Si detectas **errores en herramientas/scripts/wrappers/paquetes del stack** (por ejemplo `termux-cmd.sh`, `rish-via-termux`, `thermal-guard`, `watchdog`, `androidctl`, `work-start.sh`, `sensors.py`, `wcl-*`, etc.), **no intentes corregirlos**. Deposita un ticket en el buzón central de AgentOS.
+
+### Cómo reportar
+
+1. Crea un archivo en el buzón de tickets de AgentOS:
+   - Ruta: `~/NeoOS/agent-core/inbox/tickets/<proyecto>-<YYYYMMDD>-<HHMMSS>.md`
+   - Schema: `~/NeoOS/agent-core/inbox/tickets/_schema.md`
+   - Template: `~/NeoOS/agent-core/inbox/tickets/_template.md`
+2. Copia el template, rellena el frontmatter YAML y las secciones.
+3. El campo `estado` siempre empieza como `abierto`. Solo AgentOS cambia el estado.
+4. Si el impacto es alto, notifica adicionalmente:
+
+```bash
+termux-cmd.sh 'termux-notification --title "Ticket AgentOS" --content "Ticket de <proyecto>: <resumen>"'
+```
+
+### Reglas
+- **Solo escritura** en `inbox/tickets/`: crear tu ticket. No modificar tickets de otros proyectos.
+- **No modificar** otras carpetas de `~/NeoOS/agent-core/`.
+- AgentOS revisa `inbox/tickets/` y actúa según prioridad.

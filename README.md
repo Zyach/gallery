@@ -86,20 +86,12 @@ Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file 
 
 ---
 
-## ✨ Changes made in this fork
+## ✨ Fork changes
 
-*   Add option to expose HTTP API to allow Every Code calls
-*   Keep upstream experiences such as Tiny Garden while preserving the local-only HTTP bridge for Every Code on `127.0.0.1`
-*   Chat history is de-scoped and being removed from the fork to reduce maintenance/conflict surface during upstream sync
+This fork adds:
 
-## Fork Status
+- **HTTP API loopback** — `LlmHttpService` on `127.0.0.1` for local-only inference via Every Code
+- **Thinking mode** — `<think>` tag parsing routes thinking tokens to collapsible UI panel
+- **Benchmark in navigation** — accessible from model screens
 
-The fork is in active convergence with `upstream/main`.
-
-- Living project documentation now lives in [`docs/STATE.md`](docs/STATE.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`docs/backlog.md`](docs/backlog.md).
-- Detailed convergence planning lives in [`docs/UPSTREAM_CATCHUP_PLAN.md`](docs/UPSTREAM_CATCHUP_PLAN.md), with [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) kept as a compatibility pointer.
-- GitHub Actions is the primary build validation path for this repo through `.github/workflows/android-apk.yml`.
-- Tiny Garden is restored.
-- Chat history is de-scoped and being removed from the fork.
-- Runtime abstraction from upstream is already partially adopted (`runtime/`, `runtimeHelper`, and helper signature alignment).
-- Benchmark groundwork is already in the repo (`benchmark.proto`, serializers, `ui/benchmark/*`), but it is not yet wired into navigation/home.
+**Version: 0.3.0-alpha** | [Full status](docs/STATE.md) | [Roadmap](docs/ROADMAP.md) | [Backlog](docs/backlog.md) | [Divergences](docs/FORK_DIVERGENCES.md)

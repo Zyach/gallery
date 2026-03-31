@@ -204,7 +204,7 @@ class LlmHttpService : Service() {
   private fun nextRequestId(): String = "r${requestCounter.incrementAndGet()}"
 
   private fun payloadLoggingEnabled(): Boolean =
-    BuildConfig.DEBUG || LlmHttpPrefs.isPayloadLoggingEnabled(this)
+    LlmHttpPrefs.isPayloadLoggingEnabled(this)
 
   private fun logEvent(message: String) {
     val line = "LLM_HTTP $message"
@@ -242,7 +242,7 @@ class LlmHttpService : Service() {
     }
   }
 
-  private inner class NanoServer(port: Int) : NanoHTTPD(port) {
+  private inner class NanoServer(port: Int) : NanoHTTPD("127.0.0.1", port) {
     private val executor = Executors.newSingleThreadExecutor()
     private val inferenceLock = Any()
 
@@ -251,20 +251,20 @@ class LlmHttpService : Service() {
         when (session.method) {
           Method.GET -> when (session.uri) {
             "/ping" -> okJsonText("{\"status\":\"ok\"}")
-            "/v1/models" -> okJsonText(modelsPayload())
-            "/debug/models" -> okJsonText(modelsPayload())
+            "/v1/models" -> requireAuth(session) ?: okJsonText(modelsPayload())
+            "/debug/models" -> requireAuth(session) ?: okJsonText(modelsPayload())
             else -> notFound()
           }
           Method.POST -> when (session.uri) {
-            "/generate" -> handleGenerate(session)
-            "/v1/chat/completions" -> handleChatCompletion(session)
-            "/v1/responses" -> handleResponses(session)
+            "/generate" -> requireAuth(session) ?: handleGenerate(session)
+            "/v1/chat/completions" -> requireAuth(session) ?: handleChatCompletion(session)
+            "/v1/responses" -> requireAuth(session) ?: handleResponses(session)
             else -> notFound()
           }
           else -> methodNotAllowed()
         }
       } catch (t: Throwable) {
-        newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, t.message)
+        jsonError(Response.Status.INTERNAL_ERROR, t.message ?: "internal_error")
       }
     }
 
@@ -318,7 +318,7 @@ class LlmHttpService : Service() {
       val prompt = req.messages.joinToString("\n") { it.content }
       logPayload("POST /v1/chat/completions prompt", prompt, requestId)
       val requestedId = resolveModelId(req.model)
-      val resolvedModel = selectModel(req.model) ?: return badRequest("llm error")
+      val resolvedModel = selectModel(req.model) ?: return notFound("model_not_found")
       val resolvedName = resolvedModel.name
       logEvent(
         "request_start id=$requestId endpoint=/v1/chat/completions bodyBytes=$bodyBytes promptChars=${prompt.length} model=$requestedId resolved=$resolvedName"
@@ -403,7 +403,7 @@ class LlmHttpService : Service() {
         return badRequest("tool_choice required but tools empty")
       }
       val requestedId = resolveModelId(req.model)
-      val resolvedModel = selectModel(req.model) ?: return badRequest("llm error")
+      val resolvedModel = selectModel(req.model) ?: return notFound("model_not_found")
       val resolvedName = resolvedModel.name
       val modelId = resolvedName
       val prompt = extractText(req.messages ?: req.input)
@@ -529,6 +529,7 @@ class LlmHttpService : Service() {
             supportImage = false,
             supportAudio = false,
             onDone = { err = it },
+            systemInstruction = null,
           )
           if (err.isNotEmpty()) return null
         }
@@ -545,7 +546,7 @@ class LlmHttpService : Service() {
             LlmChatModelHelper.runInference(
               model = model,
               input = prompt,
-              resultListener = { partial, done ->
+              resultListener = { partial, done, _ ->
                 if (partial.isNotEmpty()) {
                   if (firstTokenMs == null) {
                     firstTokenMs = SystemClock.elapsedRealtime() - startMs
@@ -571,6 +572,7 @@ class LlmHttpService : Service() {
           model = model,
           supportImage = false,
           supportAudio = false,
+          systemInstruction = null,
         )
       } else if (error != null) {
         cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "error")
@@ -734,21 +736,37 @@ class LlmHttpService : Service() {
     private fun okJsonText(body: String): Response =
       newFixedLengthResponse(Response.Status.OK, "application/json", body)
 
-    private fun badRequest(msg: String): Response =
-      newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, msg)
+    private fun requireAuth(session: IHTTPSession): Response? {
+      val expectedToken = LlmHttpPrefs.getBearerToken(this@LlmHttpService)
+      if (expectedToken.isBlank()) return null
 
-    private fun notFound(): Response =
-      newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+      val header = session.headers["authorization"] ?: session.headers["Authorization"] ?: ""
+      val expectedHeader = "Bearer $expectedToken"
+      if (header == expectedHeader) return null
+
+      return unauthorized("unauthorized")
+    }
+
+    private fun jsonError(status: Response.Status, error: String): Response =
+      newFixedLengthResponse(status, "application/json", """{"error":"$error"}""")
+
+    private fun badRequest(msg: String): Response =
+      jsonError(Response.Status.BAD_REQUEST, msg)
+
+    private fun notFound(error: String = "not_found"): Response =
+      jsonError(Response.Status.NOT_FOUND, error)
+
+    private fun unauthorized(error: String): Response {
+      val response = jsonError(Response.Status.UNAUTHORIZED, error)
+      response.addHeader("WWW-Authenticate", "Bearer")
+      return response
+    }
 
     private fun methodNotAllowed(): Response =
-      newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method not allowed")
+      jsonError(Response.Status.METHOD_NOT_ALLOWED, "method_not_allowed")
 
     private fun payloadTooLarge(): Response =
-      newFixedLengthResponse(
-        Response.Status.BAD_REQUEST,
-        MIME_PLAINTEXT,
-        "Payload too large",
-      )
+      jsonError(Response.Status.BAD_REQUEST, "payload_too_large")
   }
 
   private fun modelsPayload(): String {

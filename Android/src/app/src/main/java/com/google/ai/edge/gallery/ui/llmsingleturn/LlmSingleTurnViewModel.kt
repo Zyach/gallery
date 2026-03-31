@@ -22,9 +22,9 @@ import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.common.processLlmResponse
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageBenchmarkLlmResult
 import com.google.ai.edge.gallery.ui.common.chat.Stat
-import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import com.google.ai.edge.litertlm.ExperimentalApi
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -86,10 +86,11 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
       val supportAudio =
         model.llmSupportAudio &&
           task.id == com.google.ai.edge.gallery.data.BuiltInTaskId.LLM_ASK_AUDIO
-      LlmChatModelHelper.resetConversation(
+      model.runtimeHelper.resetConversation(
         model = model,
         supportImage = supportImage,
         supportAudio = supportAudio,
+        systemInstruction = null,
       )
       delay(500)
 
@@ -104,10 +105,10 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
       val start = System.currentTimeMillis()
       var response = ""
       var lastBenchmarkUpdateTs = 0L
-      LlmChatModelHelper.runInference(
+      model.runtimeHelper.runInference(
         model = model,
         input = input,
-        resultListener = { partialResult, done ->
+        resultListener = { partialResult, done, _ ->
           val curTs = System.currentTimeMillis()
 
           if (firstRun) {
@@ -168,8 +169,10 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
           setInProgress(false)
         },
         onError = { message ->
+          Log.e(TAG, "Error in single-turn inference: $message")
           setPreparing(false)
           setInProgress(false)
+          updateResponse(model = model, promptTemplateType = uiState.value.selectedPromptTemplateType, response = "Error: $message")
         },
       )
     }

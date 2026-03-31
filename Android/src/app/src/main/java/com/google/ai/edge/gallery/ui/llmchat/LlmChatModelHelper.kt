@@ -29,8 +29,12 @@ import com.google.ai.edge.gallery.data.DEFAULT_TOPK
 import com.google.ai.edge.gallery.data.DEFAULT_TOPP
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
+import com.google.ai.edge.gallery.runtime.CleanUpListener
+import com.google.ai.edge.gallery.runtime.LlmModelHelper
+import com.google.ai.edge.gallery.runtime.ResultListener
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
@@ -40,9 +44,11 @@ import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ToolProvider
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
 import kotlin.math.min
+import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
 private const val LOW_MEM_MAX_TOKENS = 512
@@ -50,13 +56,9 @@ private const val LOW_MEM_THRESHOLD_FRACTION = 0.15
 private const val LOW_MEM_MIN_BYTES = 768L * 1024L * 1024L
 private const val LOW_MEM_MAX_BYTES = 1536L * 1024L * 1024L
 
-typealias ResultListener = (partialResult: String, done: Boolean) -> Unit
-
-typealias CleanUpListener = () -> Unit
-
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
-object LlmChatModelHelper {
+object LlmChatModelHelper : LlmModelHelper {
   // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
 
@@ -89,6 +91,30 @@ object LlmChatModelHelper {
   }
 
   @OptIn(ExperimentalApi::class) // opt-in experimental flags
+  override fun initialize(
+    context: Context,
+    model: Model,
+    supportImage: Boolean,
+    supportAudio: Boolean,
+    onDone: (String) -> Unit,
+    systemInstruction: Contents? = null,
+    tools: List<ToolProvider> = listOf(),
+    enableConversationConstrainedDecoding: Boolean = false,
+    coroutineScope: CoroutineScope? = null,
+  ) {
+    initializeInternal(
+      context = context,
+      model = model,
+      supportImage = supportImage,
+      supportAudio = supportAudio,
+      onDone = onDone,
+      systemInstruction = systemInstruction,
+      tools = tools,
+      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
+    )
+  }
+
+  @OptIn(ExperimentalApi::class) // compatibility overload for older call sites
   fun initialize(
     context: Context,
     model: Model,
@@ -98,6 +124,29 @@ object LlmChatModelHelper {
     systemMessage: Message? = null,
     tools: List<Any> = listOf(),
     enableConversationConstrainedDecoding: Boolean = false,
+  ) {
+    initializeInternal(
+      context = context,
+      model = model,
+      supportImage = supportImage,
+      supportAudio = supportAudio,
+      onDone = onDone,
+      systemInstruction = systemMessage?.let { Contents.of(it.toString()) },
+      tools = tools.filterIsInstance<ToolProvider>(),
+      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
+    )
+  }
+
+  @OptIn(ExperimentalApi::class)
+  private fun initializeInternal(
+    context: Context,
+    model: Model,
+    supportImage: Boolean,
+    supportAudio: Boolean,
+    onDone: (String) -> Unit,
+    systemInstruction: Contents?,
+    tools: List<ToolProvider>,
+    enableConversationConstrainedDecoding: Boolean,
   ) {
     // Prepare options.
     val maxTokens =
@@ -198,7 +247,7 @@ object LlmChatModelHelper {
                 topP = topP.toDouble(),
                 temperature = temperature.toDouble(),
               ),
-            systemMessage = systemMessage,
+            systemInstruction = systemInstruction,
             tools = tools,
           )
         )
@@ -212,6 +261,25 @@ object LlmChatModelHelper {
   }
 
   @OptIn(ExperimentalApi::class) // opt-in experimental flags
+  override fun resetConversation(
+    model: Model,
+    supportImage: Boolean,
+    supportAudio: Boolean,
+    systemInstruction: Contents? = null,
+    tools: List<ToolProvider> = listOf(),
+    enableConversationConstrainedDecoding: Boolean = false,
+  ) {
+    resetConversationInternal(
+      model = model,
+      supportImage = supportImage,
+      supportAudio = supportAudio,
+      systemInstruction = systemInstruction,
+      tools = tools,
+      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
+    )
+  }
+
+  @OptIn(ExperimentalApi::class) // compatibility overload for older call sites
   fun resetConversation(
     model: Model,
     supportImage: Boolean,
@@ -219,6 +287,25 @@ object LlmChatModelHelper {
     systemMessage: Message? = null,
     tools: List<Any> = listOf(),
     enableConversationConstrainedDecoding: Boolean = false,
+  ) {
+    resetConversationInternal(
+      model = model,
+      supportImage = supportImage,
+      supportAudio = supportAudio,
+      systemInstruction = systemMessage?.let { Contents.of(it.toString()) },
+      tools = tools.filterIsInstance<ToolProvider>(),
+      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
+    )
+  }
+
+  @OptIn(ExperimentalApi::class)
+  private fun resetConversationInternal(
+    model: Model,
+    supportImage: Boolean,
+    supportAudio: Boolean,
+    systemInstruction: Contents?,
+    tools: List<ToolProvider>,
+    enableConversationConstrainedDecoding: Boolean,
   ) {
     try {
       Log.d(TAG, "Resetting conversation for model '${model.name}'")
@@ -246,7 +333,7 @@ object LlmChatModelHelper {
                 topP = topP.toDouble(),
                 temperature = temperature.toDouble(),
               ),
-            systemMessage = systemMessage,
+            systemInstruction = systemInstruction,
             tools = tools,
           )
         )
@@ -259,7 +346,7 @@ object LlmChatModelHelper {
     }
   }
 
-  fun cleanUp(model: Model, onDone: () -> Unit) {
+  override fun cleanUp(model: Model, onDone: () -> Unit) {
     if (model.instance == null) {
       return
     }
@@ -288,7 +375,7 @@ object LlmChatModelHelper {
     Log.d(TAG, "Clean up done.")
   }
 
-  fun runInference(
+  override fun runInference(
     model: Model,
     input: String,
     resultListener: ResultListener,
@@ -296,6 +383,8 @@ object LlmChatModelHelper {
     onError: (message: String) -> Unit = {},
     images: List<Bitmap> = listOf(),
     audioClips: List<ByteArray> = listOf(),
+    coroutineScope: CoroutineScope? = null,
+    extraContext: Map<String, String>? = null,
   ) {
     val instance = model.instance as LlmModelInstance
 
@@ -318,21 +407,64 @@ object LlmChatModelHelper {
       contents.add(Content.Text(input))
     }
 
+    val thinkingEnabled = extraContext?.get("enable_thinking") == "true"
+    var insideThinking = false
+    val thinkingBuffer = StringBuilder()
+
     conversation.sendMessageAsync(
       Message.of(contents),
       object : MessageCallback {
         override fun onMessage(message: Message) {
-          resultListener(message.toString(), false)
+          if (!thinkingEnabled) {
+            resultListener(message.toString(), false, null)
+            return
+          }
+
+          val token = message.toString()
+          var remaining = token
+
+          while (remaining.isNotEmpty()) {
+            if (!insideThinking) {
+              val openIdx = remaining.indexOf("<think>")
+              if (openIdx == -1) {
+                resultListener(remaining, false, null)
+                remaining = ""
+              } else {
+                val before = remaining.substring(0, openIdx)
+                if (before.isNotEmpty()) {
+                  resultListener(before, false, null)
+                }
+                insideThinking = true
+                thinkingBuffer.clear()
+                remaining = remaining.substring(openIdx + "<think>".length)
+              }
+            } else {
+              val closeIdx = remaining.indexOf("</think>")
+              if (closeIdx == -1) {
+                thinkingBuffer.append(remaining)
+                resultListener("", false, remaining)
+                remaining = ""
+              } else {
+                val thinkingChunk = remaining.substring(0, closeIdx)
+                if (thinkingChunk.isNotEmpty()) {
+                  thinkingBuffer.append(thinkingChunk)
+                  resultListener("", false, thinkingChunk)
+                }
+                insideThinking = false
+                remaining = remaining.substring(closeIdx + "</think>".length)
+              }
+            }
+          }
         }
 
         override fun onDone() {
-          resultListener("", true)
+          resultListener("", true, null)
         }
 
         override fun onError(throwable: Throwable) {
           if (throwable is CancellationException) {
             Log.i(TAG, "The inference is cancelled.")
-            resultListener("", true)
+            resultListener("", true, null)
           } else {
             Log.e(TAG, "onError", throwable)
             onError("Error: ${throwable.message}")
@@ -342,9 +474,34 @@ object LlmChatModelHelper {
     )
   }
 
+  fun runInference(
+    model: Model,
+    input: String,
+    resultListener: (partialResult: String, done: Boolean) -> Unit,
+    cleanUpListener: CleanUpListener,
+    onError: (message: String) -> Unit = {},
+    images: List<Bitmap> = listOf(),
+    audioClips: List<ByteArray> = listOf(),
+  ) {
+    runInference(
+      model = model,
+      input = input,
+      resultListener = { partialResult, done, _ -> resultListener(partialResult, done) },
+      cleanUpListener = cleanUpListener,
+      onError = onError,
+      images = images,
+      audioClips = audioClips,
+    )
+  }
+
   private fun Bitmap.toPngByteArray(): ByteArray {
     val stream = ByteArrayOutputStream()
     this.compress(Bitmap.CompressFormat.PNG, 100, stream)
     return stream.toByteArray()
+  }
+
+  override fun stopResponse(model: Model) {
+    val instance = model.instance as? LlmModelInstance ?: return
+    instance.conversation.cancelProcess()
   }
 }
