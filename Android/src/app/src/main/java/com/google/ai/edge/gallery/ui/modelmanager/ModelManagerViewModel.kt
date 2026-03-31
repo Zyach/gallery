@@ -515,6 +515,7 @@ constructor(
             BuiltInTaskId.LLM_ASK_IMAGE,
             BuiltInTaskId.LLM_ASK_AUDIO,
             BuiltInTaskId.LLM_PROMPT_LAB,
+            BuiltInTaskId.LLM_TINY_GARDEN,
             BuiltInTaskId.LLM_MOBILE_ACTIONS,
           )
       )) {
@@ -527,9 +528,11 @@ constructor(
       if (
         (task.id == BuiltInTaskId.LLM_ASK_IMAGE && model.llmSupportImage) ||
           (task.id == BuiltInTaskId.LLM_ASK_AUDIO && model.llmSupportAudio) ||
+          (task.id == BuiltInTaskId.LLM_TINY_GARDEN && model.llmSupportTinyGarden) ||
           (task.id == BuiltInTaskId.LLM_MOBILE_ACTIONS && model.llmSupportMobileActions) ||
           (task.id != BuiltInTaskId.LLM_ASK_IMAGE &&
             task.id != BuiltInTaskId.LLM_ASK_AUDIO &&
+            task.id != BuiltInTaskId.LLM_TINY_GARDEN &&
             task.id != BuiltInTaskId.LLM_MOBILE_ACTIONS)
       ) {
         task.models.add(model)
@@ -940,6 +943,9 @@ constructor(
       if (model.llmSupportAudio) {
         tasks.get(key = BuiltInTaskId.LLM_ASK_AUDIO)?.models?.add(model)
       }
+      if (model.llmSupportTinyGarden) {
+        tasks.get(key = BuiltInTaskId.LLM_TINY_GARDEN)?.models?.add(model)
+      }
       if (model.llmSupportMobileActions) {
         tasks.get(key = BuiltInTaskId.LLM_MOBILE_ACTIONS)?.models?.add(model)
       }
@@ -982,11 +988,14 @@ constructor(
           defaultTopP = info.llmConfig.defaultTopp,
           defaultTemperature = info.llmConfig.defaultTemperature,
           accelerators = accelerators,
+          supportThinking = info.llmConfig.supportThinking,
         )
         .toMutableList()
     val llmSupportImage = info.llmConfig.supportImage
     val llmSupportAudio = info.llmConfig.supportAudio
+    val llmSupportTinyGarden = info.llmConfig.supportTinyGarden
     val llmSupportMobileActions = info.llmConfig.supportMobileActions
+    val llmSupportThinking = info.llmConfig.supportThinking
     val model =
       Model(
         name = info.fileName,
@@ -994,12 +1003,18 @@ constructor(
         configs = configs,
         sizeInBytes = info.fileSize,
         downloadFileName = "$IMPORTS_DIR/${info.fileName}",
+        isLlm = true,
+        runtimeType = RuntimeType.LITERT_LM,
         showBenchmarkButton = false,
         showRunAgainButton = false,
         imported = true,
         llmSupportImage = llmSupportImage,
         llmSupportAudio = llmSupportAudio,
+        llmSupportTinyGarden = llmSupportTinyGarden,
         llmSupportMobileActions = llmSupportMobileActions,
+        llmSupportThinking = llmSupportThinking,
+        llmMaxToken = info.llmConfig.defaultMaxTokens,
+        accelerators = accelerators,
       )
     model.preProcess()
 

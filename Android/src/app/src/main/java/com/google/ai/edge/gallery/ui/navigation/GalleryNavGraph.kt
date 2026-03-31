@@ -16,6 +16,7 @@
 
 package com.google.ai.edge.gallery.ui.navigation
 
+import android.net.Uri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 import android.util.Log
@@ -70,6 +71,7 @@ import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.isLegacyTasks
 import com.google.ai.edge.gallery.firebaseAnalytics
+import com.google.ai.edge.gallery.ui.benchmark.BenchmarkScreen
 import com.google.ai.edge.gallery.ui.common.ErrorDialog
 import com.google.ai.edge.gallery.ui.common.ModelPageAppBar
 import com.google.ai.edge.gallery.ui.common.chat.ModelDownloadStatusInfoPanel
@@ -84,7 +86,7 @@ private const val TAG = "AGGalleryNavGraph"
 private const val ROUTE_HOMESCREEN = "homepage"
 private const val ROUTE_MODEL_LIST = "model_list"
 private const val ROUTE_MODEL = "route_model"
-private const val ROUTE_CHAT_HISTORY = "chat_history"
+private const val ROUTE_BENCHMARK = "route_benchmark"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -173,18 +175,6 @@ fun GalleryNavHost(
           navController.navigate(ROUTE_MODEL_LIST)
           firebaseAnalytics?.logEvent("capability_select", bundleOf("capability_name" to task.id))
         },
-        navigateToChatHistory = { navController.navigate(ROUTE_CHAT_HISTORY) },
-      )
-    }
-
-    composable(route = ROUTE_CHAT_HISTORY) {
-      com.google.ai.edge.gallery.ui.history.ChatHistoryScreen(
-        navigateUp = { navController.navigateUp() },
-        navigateToSession = { session ->
-          navController.navigate(
-            "$ROUTE_MODEL/${session.taskId}/${session.modelName}?sessionId=${session.id}",
-          )
-        },
       )
     }
 
@@ -224,23 +214,17 @@ fun GalleryNavHost(
 
     // Model page.
     composable(
-      route = "$ROUTE_MODEL/{taskId}/{modelName}?sessionId={sessionId}",
+      route = "$ROUTE_MODEL/{taskId}/{modelName}",
       arguments =
         listOf(
           navArgument("taskId") { type = NavType.StringType },
           navArgument("modelName") { type = NavType.StringType },
-          navArgument("sessionId") {
-            type = NavType.StringType
-            nullable = true
-            defaultValue = null
-          },
         ),
       enterTransition = { slideEnter() },
       exitTransition = { slideExit() },
     ) { backStackEntry ->
       val modelName = backStackEntry.arguments?.getString("modelName") ?: ""
       val taskId = backStackEntry.arguments?.getString("taskId") ?: ""
-      val sessionId = backStackEntry.arguments?.getString("sessionId")
       modelManagerViewModel.getModelByName(name = modelName)?.let { model ->
         LaunchedEffect(Unit) { modelManagerViewModel.selectModel(model) }
 
@@ -255,7 +239,9 @@ fun GalleryNavHost(
                     enableModelListAnimation = false
                     navController.navigateUp()
                   },
-                  sessionId = sessionId,
+                  onOpenBenchmarkScreen = { modelName ->
+                    navController.navigate("$ROUTE_BENCHMARK/${Uri.encode(modelName)}")
+                  },
                 )
             )
           } else {
@@ -283,6 +269,22 @@ fun GalleryNavHost(
             }
           }
         }
+      }
+    }
+
+    composable(
+      route = "$ROUTE_BENCHMARK/{modelName}",
+      arguments = listOf(navArgument("modelName") { type = NavType.StringType }),
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) { backStackEntry ->
+      val modelName = backStackEntry.arguments?.getString("modelName") ?: ""
+      modelManagerViewModel.getModelByName(name = modelName)?.let { model ->
+        BenchmarkScreen(
+          initialModel = model,
+          modelManagerViewModel = modelManagerViewModel,
+          onBackClicked = { navController.navigateUp() },
+        )
       }
     }
   }

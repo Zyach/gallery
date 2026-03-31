@@ -26,7 +26,6 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -121,16 +120,6 @@ fun GalleryTopAppBar(
               Icon(
                 imageVector = Icons.Rounded.Settings,
                 contentDescription = stringResource(R.string.cd_app_settings_icon),
-                tint = MaterialTheme.colorScheme.onSurface,
-              )
-            }
-          }
-
-          AppBarActionType.CHAT_HISTORY -> {
-            IconButton(onClick = action.actionFn) {
-              Icon(
-                imageVector = Icons.Rounded.History,
-                contentDescription = stringResource(R.string.cd_chat_history_icon),
                 tint = MaterialTheme.colorScheme.onSurface,
               )
             }

@@ -40,6 +40,7 @@ enum class ChatMessageType {
   BENCHMARK_RESULT,
   BENCHMARK_LLM_RESULT,
   PROMPT_TEMPLATES,
+  THINKING,
 }
 
 enum class ChatSide {
@@ -290,3 +291,20 @@ class ChatMessagePromptTemplates(
   val templates: List<PromptTemplate>,
   val showMakeYourOwn: Boolean = true,
 ) : ChatMessage(type = ChatMessageType.PROMPT_TEMPLATES, side = ChatSide.SYSTEM)
+
+/** Chat message for showcasing a thought process. */
+class ChatMessageThinking(
+  val content: String,
+  val inProgress: Boolean,
+  override val side: ChatSide = ChatSide.AGENT,
+  override val accelerator: String = "",
+) : ChatMessage(type = ChatMessageType.THINKING, side = side, accelerator = accelerator) {
+  override fun clone(): ChatMessageThinking {
+    return ChatMessageThinking(
+      content = content,
+      inProgress = inProgress,
+      side = side,
+      accelerator = accelerator,
+    )
+  }
+}

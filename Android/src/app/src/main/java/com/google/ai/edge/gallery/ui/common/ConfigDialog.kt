@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.google.ai.edge.gallery.data.BooleanSwitchConfig
 import com.google.ai.edge.gallery.data.Config
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.LabelConfig
 import com.google.ai.edge.gallery.data.NumberSliderConfig
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
@@ -238,6 +239,8 @@ fun getTextFieldDisplayValue(valueType: ValueType, value: Float): String {
  */
 @Composable
 fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String, Any>) {
+  val focusManager = LocalFocusManager.current
+
   Column(modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
     // Field label.
     Text(config.key.label, style = MaterialTheme.typography.titleSmall)
@@ -263,8 +266,14 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
           0f
         }
 
+      Text(
+        text = getTextFieldDisplayValue(config.valueType, config.sliderMin),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
       Slider(
-        modifier = Modifier.height(24.dp).weight(1f),
+        modifier = Modifier.height(24.dp).weight(1f).padding(horizontal = 8.dp),
         value = sliderValue,
         valueRange = config.sliderMin..config.sliderMax,
         onValueChange = {
@@ -289,6 +298,10 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
             }
           },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+          focusManager.clearFocus()
+        }),
+        singleLine = true,
         onValueChange = {
           // Always update the display value to reflect the update on the UI.
           textFieldDisplayValue = it
@@ -314,6 +327,23 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
         ) {
           Box(modifier = Modifier.padding(8.dp)) { innerTextField() }
         }
+      }
+    }
+
+    if (config.key == ConfigKeys.MAX_TOKENS) {
+      val currentValue =
+        try {
+          values[config.key.label] as Float
+        } catch (e: Exception) {
+          0f
+        }
+      if (currentValue >= 10000f) {
+        Text(
+          text = "High max tokens can increase latency and memory pressure.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.error,
+          modifier = Modifier.padding(top = 8.dp),
+        )
       }
     }
   }

@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.MapsUgc
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -71,6 +72,7 @@ fun ModelPageAppBar(
   modifier: Modifier = Modifier,
   isResettingSession: Boolean = false,
   onResetSessionClicked: (Model) -> Unit = {},
+  onBenchmarkScreenClicked: (Model) -> Unit = {},
   canShowResetSessionButton: Boolean = false,
   hideModelSelector: Boolean = false,
   onConfigChanged: (oldConfigValues: Map<String, Any>, newConfigValues: Map<String, Any>) -> Unit =
@@ -138,12 +140,38 @@ fun ModelPageAppBar(
     // The config button for the model (if existed).
     actions = {
       val downloadSucceeded = curDownloadStatus?.status == ModelDownloadStatusType.SUCCEEDED
+      val showBenchmarkButton = model.showBenchmarkButton && downloadSucceeded
       val showConfigButton = model.configs.isNotEmpty() && downloadSucceeded
       val showResetSessionButton = canShowResetSessionButton && downloadSucceeded
-      Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+      Box(modifier = Modifier.size(126.dp), contentAlignment = Alignment.CenterEnd) {
+        var benchmarkButtonOffset = 0.dp
         var configButtonOffset = 0.dp
-        if (showConfigButton && canShowResetSessionButton) {
-          configButtonOffset = (-40).dp
+        if (showResetSessionButton) {
+          if (showConfigButton) {
+            configButtonOffset = (-40).dp
+          }
+          if (showBenchmarkButton) {
+            benchmarkButtonOffset = if (showConfigButton) (-80).dp else (-40).dp
+          }
+        } else if (showConfigButton && showBenchmarkButton) {
+          benchmarkButtonOffset = (-40).dp
+        }
+        if (showBenchmarkButton) {
+          val enableBenchmarkButton = !isModelInitializing && !inProgress && isModelInitialized
+          IconButton(
+            onClick = { onBenchmarkScreenClicked(model) },
+            enabled = enableBenchmarkButton,
+            modifier =
+              Modifier.offset(x = benchmarkButtonOffset)
+                .alpha(if (!enableBenchmarkButton) 0.5f else 1f),
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.BarChart,
+              contentDescription = stringResource(R.string.run_benchmark),
+              tint = MaterialTheme.colorScheme.onSurface,
+              modifier = Modifier.size(20.dp),
+            )
+          }
         }
         if (showConfigButton) {
           val enableConfigButton = !isModelInitializing && !inProgress && isModelInitialized

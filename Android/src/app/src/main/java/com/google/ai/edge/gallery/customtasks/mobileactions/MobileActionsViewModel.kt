@@ -28,13 +28,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
+import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatus
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.ToolProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.net.URLEncoder
@@ -125,7 +127,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
   fun processUserPrompt(
     model: Model,
     userPrompt: String,
-    tools: List<MobileActionsTools>,
+    tools: List<ToolProvider>,
     onProcessDone: () -> Unit,
     onError: (error: String) -> Unit,
   ) {
@@ -178,13 +180,13 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     }
   }
 
-  fun resetConversation(model: Model, tools: List<MobileActionsTools>) {
+  fun resetConversation(model: Model, tools: List<ToolProvider>) {
     _isResettingConversation.value = true
-    LlmChatModelHelper.resetConversation(
+    model.runtimeHelper.resetConversation(
       model = model,
       supportImage = false,
       supportAudio = false,
-      systemMessage = Message.of(getSystemPrompt()),
+      systemInstruction = Contents.of(getSystemPrompt()),
       tools = tools,
     )
     _isResettingConversation.value = false
@@ -193,7 +195,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
   fun resetEngine(
     context: Context,
     model: Model,
-    tools: List<MobileActionsTools>,
+    tools: List<ToolProvider>,
     modelManagerViewModel: ModelManagerViewModel,
     onError: (error: String) -> Unit,
   ) {
@@ -204,10 +206,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         model = model,
         status = ModelInitializationStatus(status = ModelInitializationStatusType.NOT_INITIALIZED),
       )
-      LlmChatModelHelper.cleanUp(
+      model.runtimeHelper.cleanUp(
         model = model,
         onDone = {
-          LlmChatModelHelper.initialize(
+          model.runtimeHelper.initialize(
             context = context,
             model = model,
             supportImage = false,
@@ -222,7 +224,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
                 onError(error)
               }
             },
-            systemMessage = Message.of(getSystemPrompt()),
+            systemInstruction = Contents.of(getSystemPrompt()),
             tools = tools,
           )
         },

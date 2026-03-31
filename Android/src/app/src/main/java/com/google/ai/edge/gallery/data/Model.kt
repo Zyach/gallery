@@ -17,6 +17,7 @@
 package com.google.ai.edge.gallery.data
 
 import android.content.Context
+import com.google.gson.annotations.SerializedName
 import java.io.File
 
 data class ModelDataFile(
@@ -30,6 +31,11 @@ const val IMPORTS_DIR = "__imports"
 private val NORMALIZE_NAME_REGEX = Regex("[^a-zA-Z0-9]")
 
 data class PromptTemplate(val title: String, val description: String, val prompt: String)
+
+enum class RuntimeType {
+  @SerializedName("unknown") UNKNOWN,
+  @SerializedName("litert_lm") LITERT_LM,
+}
 
 /**
  * A model for a task (see [Task]).
@@ -150,8 +156,14 @@ data class Model(
    */
   val extraDataFiles: List<ModelDataFile> = listOf(),
 
+  /** Whether the model is LLM or not. */
+  val isLlm: Boolean = false,
+
   // End of model download related fields.
   //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /** The type of local runtime environment to use for running the model. */
+  val runtimeType: RuntimeType = RuntimeType.UNKNOWN,
 
   /**
    * Set this to a relative path pointing to a dir (e.g., my_model/local_dir/) if you want to
@@ -210,8 +222,23 @@ data class Model(
   /** Whether the LLM model supports audio input. */
   val llmSupportAudio: Boolean = false,
 
+  /** Whether the LLM model supports Tiny Garden. */
+  val llmSupportTinyGarden: Boolean = false,
+
   /** Whether the LLM model supports mobile actions. */
   val llmSupportMobileActions: Boolean = false,
+
+  /** Whether the LLM model supports thinking mode. */
+  val llmSupportThinking: Boolean = false,
+
+  /** The max token for llm model. */
+  val llmMaxToken: Int = 0,
+
+  /** Compatible accelerators. */
+  val accelerators: List<Accelerator> = listOf(),
+
+  /** Accelerator for running vision encoder. */
+  val visionAccelerator: Accelerator = Accelerator.GPU,
 
   /** Whether the model is imported or not. */
   val imported: Boolean = false,

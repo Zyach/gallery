@@ -21,8 +21,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStoreFile
-import androidx.room.Room
 import com.google.ai.edge.gallery.AppLifecycleProvider
+import com.google.ai.edge.gallery.BenchmarkResultsSerializer
+import com.google.ai.edge.gallery.CutoutsSerializer
 import com.google.ai.edge.gallery.GalleryLifecycleProvider
 import com.google.ai.edge.gallery.SettingsSerializer
 import com.google.ai.edge.gallery.UserDataSerializer
@@ -30,13 +31,8 @@ import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDataStoreRepository
 import com.google.ai.edge.gallery.data.DefaultDownloadRepository
 import com.google.ai.edge.gallery.data.DownloadRepository
-import com.google.ai.edge.gallery.data.chathistory.ChatAttachmentStorage
-import com.google.ai.edge.gallery.data.chathistory.ChatCryptoManager
-import com.google.ai.edge.gallery.data.chathistory.ChatHistoryDao
-import com.google.ai.edge.gallery.data.chathistory.ChatHistoryDatabase
-import com.google.ai.edge.gallery.data.chathistory.ChatHistoryKeyManager
-import com.google.ai.edge.gallery.data.chathistory.ChatHistoryRepository
-import com.google.ai.edge.gallery.data.LlmHttpPrefs
+import com.google.ai.edge.gallery.proto.BenchmarkResults
+import com.google.ai.edge.gallery.proto.CutoutCollection
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.UserData
 import dagger.Module
@@ -44,7 +40,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import net.sqlcipher.database.SupportFactory
 import javax.inject.Singleton
 
 @Module
@@ -63,6 +58,18 @@ internal object AppModule {
   @Singleton
   fun provideUserDataSerializer(): Serializer<UserData> {
     return UserDataSerializer
+  }
+
+  @Provides
+  @Singleton
+  fun provideCutoutsSerializer(): Serializer<CutoutCollection> {
+    return CutoutsSerializer
+  }
+
+  @Provides
+  @Singleton
+  fun provideBenchmarkResultsSerializer(): Serializer<BenchmarkResults> {
+    return BenchmarkResultsSerializer
   }
 
   // Provides DataStore<Settings>
@@ -91,6 +98,30 @@ internal object AppModule {
     )
   }
 
+  @Provides
+  @Singleton
+  fun provideCutoutDataStore(
+    @ApplicationContext context: Context,
+    cutoutsSerializer: Serializer<CutoutCollection>,
+  ): DataStore<CutoutCollection> {
+    return DataStoreFactory.create(
+      serializer = cutoutsSerializer,
+      produceFile = { context.dataStoreFile("cutouts.pb") },
+    )
+  }
+
+  @Provides
+  @Singleton
+  fun provideBenchmarkResultsDataStore(
+    @ApplicationContext context: Context,
+    benchmarkResultsSerializer: Serializer<BenchmarkResults>,
+  ): DataStore<BenchmarkResults> {
+    return DataStoreFactory.create(
+      serializer = benchmarkResultsSerializer,
+      produceFile = { context.dataStoreFile("benchmark_results.pb") },
+    )
+  }
+
   // Provides AppLifecycleProvider
   @Provides
   @Singleton
@@ -104,8 +135,15 @@ internal object AppModule {
   fun provideDataStoreRepository(
     dataStore: DataStore<Settings>,
     userDataDataStore: DataStore<UserData>,
+    cutoutDataStore: DataStore<CutoutCollection>,
+    benchmarkResultsDataStore: DataStore<BenchmarkResults>,
   ): DataStoreRepository {
-    return DefaultDataStoreRepository(dataStore, userDataDataStore)
+    return DefaultDataStoreRepository(
+      dataStore,
+      userDataDataStore,
+      cutoutDataStore,
+      benchmarkResultsDataStore,
+    )
   }
 
   // Provides DownloadRepository
@@ -116,59 +154,5 @@ internal object AppModule {
     lifecycleProvider: AppLifecycleProvider,
   ): DownloadRepository {
     return DefaultDownloadRepository(context, lifecycleProvider)
-  }
-
-  @Provides
-  @Singleton
-  fun provideChatCryptoManager(): ChatCryptoManager {
-    return ChatCryptoManager()
-  }
-
-  @Provides
-  @Singleton
-  fun provideChatHistoryKeyManager(
-    @ApplicationContext context: Context,
-    cryptoManager: ChatCryptoManager,
-  ): ChatHistoryKeyManager {
-    return ChatHistoryKeyManager(context, cryptoManager)
-  }
-
-  @Provides
-  @Singleton
-  fun provideChatAttachmentStorage(
-    @ApplicationContext context: Context,
-    cryptoManager: ChatCryptoManager,
-  ): ChatAttachmentStorage {
-    return ChatAttachmentStorage(context, cryptoManager)
-  }
-
-  @Provides
-  @Singleton
-  fun provideChatHistoryDatabase(
-    @ApplicationContext context: Context,
-    keyManager: ChatHistoryKeyManager,
-  ): ChatHistoryDatabase {
-    val passphrase = keyManager.getOrCreateDbPassphrase()
-    val factory = SupportFactory(passphrase)
-    return Room.databaseBuilder(context, ChatHistoryDatabase::class.java, "chat_history.db")
-      .openHelperFactory(factory)
-      .fallbackToDestructiveMigration(true)
-      .build()
-  }
-
-  @Provides
-  @Singleton
-  fun provideChatHistoryDao(db: ChatHistoryDatabase): ChatHistoryDao {
-    return db.chatHistoryDao()
-  }
-
-  @Provides
-  @Singleton
-  fun provideChatHistoryRepository(
-    dao: ChatHistoryDao,
-    attachmentStorage: ChatAttachmentStorage,
-    @ApplicationContext context: Context,
-  ): ChatHistoryRepository {
-    return ChatHistoryRepository(dao, attachmentStorage, context, LlmHttpPrefs)
   }
 }

@@ -89,6 +89,7 @@ fun ChatView(
   onSendMessage: (Model, List<ChatMessage>) -> Unit,
   onRunAgainClicked: (Model, ChatMessage) -> Unit,
   onBenchmarkClicked: (Model, ChatMessage, Int, Int) -> Unit,
+  onOpenBenchmarkScreen: (Model) -> Unit = {},
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
   onResetSessionClicked: (Model) -> Unit = {},
@@ -155,6 +156,7 @@ fun ChatView(
         inProgress = uiState.inProgress,
         modelPreparing = uiState.preparing,
         onResetSessionClicked = onResetSessionClicked,
+        onBenchmarkScreenClicked = onOpenBenchmarkScreen,
         onConfigChanged = { old, new ->
           viewModel.addConfigChangedMessage(
             oldConfigValues = old,

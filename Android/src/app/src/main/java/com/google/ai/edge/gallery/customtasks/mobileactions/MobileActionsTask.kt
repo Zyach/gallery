@@ -27,8 +27,10 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
-import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ToolProvider
+import com.google.ai.edge.litertlm.tool
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -42,7 +44,8 @@ private const val TAG = "AGMATask"
  */
 class MobileActionsTask @Inject constructor() : CustomTask {
   private var curActions = mutableStateListOf<Action>()
-  private val tools = listOf(MobileActionsTools(onFunctionCalled = { curActions.add(it) }))
+  private val tools: List<ToolProvider> =
+    listOf(tool(MobileActionsTools(onFunctionCalled = { curActions.add(it) })))
 
   override val task =
     Task(
@@ -68,13 +71,13 @@ class MobileActionsTask @Inject constructor() : CustomTask {
     curActions.clear()
 
     // Expected to get the current time on user's device.
-    LlmChatModelHelper.initialize(
+    model.runtimeHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
-      systemMessage = Message.of(getSystemPrompt()),
+      systemInstruction = Contents.of(getSystemPrompt()),
       tools = tools,
     )
   }
@@ -86,7 +89,7 @@ class MobileActionsTask @Inject constructor() : CustomTask {
     onDone: () -> Unit,
   ) {
     curActions.clear()
-    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable

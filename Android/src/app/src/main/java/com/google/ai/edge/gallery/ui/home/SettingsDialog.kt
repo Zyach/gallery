@@ -113,13 +113,13 @@ fun SettingsDialog(
   val context = LocalContext.current
   var httpEnabled by remember { mutableStateOf(LlmHttpPrefs.isEnabled(context)) }
   var httpPortText by remember { mutableStateOf(LlmHttpPrefs.getPort(context).toString()) }
-  var historyEnabled by remember { mutableStateOf(LlmHttpPrefs.isHistoryEnabled(context)) }
   var payloadLoggingEnabled by remember {
     mutableStateOf(LlmHttpPrefs.isPayloadLoggingEnabled(context))
   }
   var acceleratorFallbackEnabled by remember {
     mutableStateOf(LlmHttpPrefs.isAcceleratorFallbackEnabled(context))
   }
+  var httpBearerToken by remember { mutableStateOf(LlmHttpPrefs.getBearerToken(context)) }
 
   Dialog(onDismissRequest = onDismissed) {
     val focusManager = LocalFocusManager.current
@@ -217,6 +217,9 @@ fun SettingsDialog(
               androidx.compose.material3.Switch(checked = httpEnabled, onCheckedChange = { checked ->
                 httpEnabled = checked
                 val port = httpPortText.toIntOrNull() ?: LlmHttpService.DEFAULT_PORT
+                if (checked) {
+                  httpBearerToken = LlmHttpPrefs.ensureBearerToken(context)
+                }
                 LlmHttpPrefs.save(context, checked, port)
                 if (checked) {
                   context.startService(Intent(context, LlmHttpService::class.java).apply {
@@ -238,17 +241,6 @@ fun SettingsDialog(
                   .widthIn(min = 80.dp)
               )
               Text("port", style = MaterialTheme.typography.bodyMedium)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-              androidx.compose.material3.Switch(
-                checked = historyEnabled,
-                onCheckedChange = { checked ->
-                  historyEnabled = checked
-                  LlmHttpPrefs.setHistoryEnabled(context, checked)
-                },
-                enabled = httpEnabled,
-              )
-              Text("Guardar historial de chat", style = MaterialTheme.typography.bodyMedium)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
               androidx.compose.material3.Switch(
@@ -276,6 +268,40 @@ fun SettingsDialog(
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Text(
+                "Bearer token HTTP",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+              )
+              Text(
+                if (httpBearerToken.isBlank()) "No configurado" else httpBearerToken,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+              Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                  onClick = {
+                    httpBearerToken = LlmHttpPrefs.ensureBearerToken(context)
+                  },
+                ) {
+                  Text(if (httpBearerToken.isBlank()) "Generar" else "Regenerar")
+                }
+                OutlinedButton(
+                  onClick = {
+                    httpBearerToken = ""
+                    LlmHttpPrefs.setBearerToken(context, "")
+                  },
+                  enabled = httpBearerToken.isNotBlank(),
+                ) {
+                  Text("Limpiar")
+                }
+              }
+              Text(
+                "Si existe token, envia Authorization: Bearer <token>. Si esta vacio, el bridge no exige auth.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
           }
 
           // HF Token management.

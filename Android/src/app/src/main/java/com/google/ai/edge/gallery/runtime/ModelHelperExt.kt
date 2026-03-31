@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.ai.edge.gallery.data
+package com.google.ai.edge.gallery.runtime
 
-/** Possible action for app bar. */
-enum class AppBarActionType {
-  NO_ACTION,
-  APP_SETTING,
-  DOWNLOAD_MANAGER,
-  NAVIGATE_UP,
-}
+import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 
-class AppBarAction(val actionType: AppBarActionType, val actionFn: () -> Unit)
+val Model.runtimeHelper: LlmModelHelper
+  get() = LlmChatModelHelper

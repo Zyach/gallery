@@ -58,6 +58,7 @@ message LlmConfig {
   bool support_audio = 7;
   bool support_tiny_garden = 8;
   bool support_mobile_actions = 9;
+  bool support_thinking = 10;
 }
 
 message Settings {
@@ -67,8 +68,46 @@ message Settings {
   repeated ImportedModel imported_model = 4;
   bool is_tos_accepted = 5;
   bool has_run_tiny_garden = 6;
+  bool has_seen_benchmark_comparison_help = 7;
+  bool is_gemma_terms_accepted = 8;
+  repeated string viewed_promo_id = 10;
 }
 
 message UserData {
   AccessTokenData access_token_data = 1;
+  map<string, string> secrets = 2;
+}
+
+enum FillMode {
+  FILL_MODE_UNSPECIFIED = 0;
+  FILL_MODE_DISABLED = 1;
+  FILL_MODE_SOLID = 2;
+  FILL_MODE_COLORIZE = 3;
+}
+
+message Point {
+  float x = 1;
+  float y = 2;
+}
+
+message StrokePath {
+  repeated Point point = 1;
+  int32 brush_color = 2;
+  float brush_size = 3;
+  float brush_softness = 4;
+  int32 blur_type = 5;
+}
+
+message Cutout {
+  string id = 1;
+  int32 rotation_degree = 2;
+  int32 border_width = 3;
+  int32 border_color = 4;
+  int32 fill_color = 5;
+  FillMode fill_mode = 6;
+  repeated StrokePath doodle_stroke = 7;
+}
+
+message CutoutCollection {
+  repeated Cutout cutout = 1;
 }

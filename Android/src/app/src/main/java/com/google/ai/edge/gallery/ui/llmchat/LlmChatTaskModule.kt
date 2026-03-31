@@ -29,6 +29,7 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.runtime.runtimeHelper
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -61,12 +62,13 @@ class LlmChatTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: (String) -> Unit,
   ) {
-    LlmChatModelHelper.initialize(
+    model.runtimeHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
+      systemInstruction = null,
     )
   }
 
@@ -76,7 +78,7 @@ class LlmChatTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: () -> Unit,
   ) {
-    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable
@@ -85,7 +87,7 @@ class LlmChatTask @Inject constructor() : CustomTask {
     LlmChatScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
-      sessionId = myData.sessionId,
+      onOpenBenchmarkScreen = myData.onOpenBenchmarkScreen,
     )
   }
 }
@@ -124,12 +126,13 @@ class LlmAskImageTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: (String) -> Unit,
   ) {
-    LlmChatModelHelper.initialize(
+    model.runtimeHelper.initialize(
       context = context,
       model = model,
       supportImage = true,
       supportAudio = false,
       onDone = onDone,
+      systemInstruction = null,
     )
   }
 
@@ -139,7 +142,7 @@ class LlmAskImageTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: () -> Unit,
   ) {
-    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable
@@ -148,7 +151,7 @@ class LlmAskImageTask @Inject constructor() : CustomTask {
     LlmAskImageScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
-      sessionId = myData.sessionId,
+      onOpenBenchmarkScreen = myData.onOpenBenchmarkScreen,
     )
   }
 }
@@ -188,12 +191,13 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: (String) -> Unit,
   ) {
-    LlmChatModelHelper.initialize(
+    model.runtimeHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
       supportAudio = true,
       onDone = onDone,
+      systemInstruction = null,
     )
   }
 
@@ -203,7 +207,7 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: () -> Unit,
   ) {
-    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable
@@ -212,7 +216,7 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
     LlmAskAudioScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
-      sessionId = myData.sessionId,
+      onOpenBenchmarkScreen = myData.onOpenBenchmarkScreen,
     )
   }
 }

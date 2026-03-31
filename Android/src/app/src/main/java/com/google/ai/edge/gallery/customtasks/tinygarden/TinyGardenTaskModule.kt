@@ -13,17 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package com.google.ai.edge.gallery.customtasks.tinygarden
 
-package com.google.ai.edge.gallery.data.chathistory
+import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
 
-import androidx.room.Database
-import androidx.room.RoomDatabase
-
-@Database(
-  entities = [ChatSessionEntity::class, ChatMessageEntity::class, ChatAttachmentEntity::class],
-  version = 1,
-  exportSchema = false,
-)
-abstract class ChatHistoryDatabase : RoomDatabase() {
-  abstract fun chatHistoryDao(): ChatHistoryDao
+@Module
+@InstallIn(SingletonComponent::class)
+internal object TinyGardenTaskModule {
+  @Provides
+  @IntoSet
+  fun provideTask(): CustomTask {
+    return TinyGardenTask()
+  }
 }

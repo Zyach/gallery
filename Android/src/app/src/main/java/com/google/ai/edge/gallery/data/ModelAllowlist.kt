@@ -23,6 +23,7 @@ data class DefaultConfig(
   @SerializedName("topP") val topP: Float?,
   @SerializedName("temperature") val temperature: Float?,
   @SerializedName("accelerators") val accelerators: String?,
+  @SerializedName("maxContextLength") val maxContextLength: Int?,
   @SerializedName("maxTokens") val maxTokens: Int?,
 )
 
@@ -40,7 +41,9 @@ data class AllowedModel(
   val disabled: Boolean? = null,
   val llmSupportImage: Boolean? = null,
   val llmSupportAudio: Boolean? = null,
+  val llmSupportTinyGarden: Boolean? = null,
   val llmSupportMobileActions: Boolean? = null,
+  val llmSupportThinking: Boolean? = null,
   val minDeviceMemoryInGb: Int? = null,
   val bestForTaskTypes: List<String>? = null,
   val localModelFilePathOverride: String? = null,
@@ -59,14 +62,18 @@ data class AllowedModel(
         taskTypes.contains(BuiltInTaskId.LLM_PROMPT_LAB) ||
         taskTypes.contains(BuiltInTaskId.LLM_ASK_AUDIO) ||
         taskTypes.contains(BuiltInTaskId.LLM_ASK_IMAGE) ||
+        taskTypes.contains(BuiltInTaskId.LLM_TINY_GARDEN) ||
         taskTypes.contains(BuiltInTaskId.LLM_MOBILE_ACTIONS)
     var configs: MutableList<Config> = mutableListOf()
+    var llmMaxToken = 1024
+    var accelerators: List<Accelerator> = DEFAULT_ACCELERATORS
     if (isLlmModel) {
       val defaultTopK: Int = defaultConfig.topK ?: DEFAULT_TOPK
       val defaultTopP: Float = defaultConfig.topP ?: DEFAULT_TOPP
       val defaultTemperature: Float = defaultConfig.temperature ?: DEFAULT_TEMPERATURE
+      val defaultMaxContextLength: Int? = defaultConfig.maxContextLength
       val defaultMaxToken = defaultConfig.maxTokens ?: 1024
-      var accelerators: List<Accelerator> = DEFAULT_ACCELERATORS
+      llmMaxToken = defaultMaxToken
       if (defaultConfig.accelerators != null) {
         val items = defaultConfig.accelerators.split(",")
         accelerators = mutableListOf()
@@ -86,7 +93,9 @@ data class AllowedModel(
             defaultTopP = defaultTopP,
             defaultTemperature = defaultTemperature,
             defaultMaxToken = defaultMaxToken,
+            defaultMaxContextLength = defaultMaxContextLength,
             accelerators = accelerators,
+            supportThinking = llmSupportThinking == true,
           )
           .toMutableList()
     }
@@ -107,13 +116,19 @@ data class AllowedModel(
       sizeInBytes = sizeInBytes,
       minDeviceMemoryInGb = minDeviceMemoryInGb,
       configs = configs,
+      isLlm = isLlmModel,
+      runtimeType = RuntimeType.LITERT_LM,
       downloadFileName = modelFile,
       showBenchmarkButton = showBenchmarkButton,
       showRunAgainButton = showRunAgainButton,
       learnMoreUrl = "https://huggingface.co/${modelId}",
       llmSupportImage = llmSupportImage == true,
       llmSupportAudio = llmSupportAudio == true,
+      llmSupportTinyGarden = llmSupportTinyGarden == true,
       llmSupportMobileActions = llmSupportMobileActions == true,
+      llmSupportThinking = llmSupportThinking == true,
+      llmMaxToken = llmMaxToken,
+      accelerators = accelerators,
       bestForTaskIds = bestForTaskTypes ?: listOf(),
       localModelFilePathOverride = localModelFilePathOverride ?: "",
     )

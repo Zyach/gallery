@@ -16,38 +16,27 @@
 
 package com.google.ai.edge.gallery.ui.llmchat
 
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.bundleOf
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.MaterialTheme
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.allowThinking
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageAudioClip
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageImage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatView
-import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 
 @Composable
 fun LlmChatScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
+  onOpenBenchmarkScreen: (String) -> Unit,
   modifier: Modifier = Modifier,
-  sessionId: String? = null,
   viewModel: LlmChatViewModel = hiltViewModel(),
 ) {
   ChatViewWrapper(
@@ -55,8 +44,8 @@ fun LlmChatScreen(
     modelManagerViewModel = modelManagerViewModel,
     taskId = BuiltInTaskId.LLM_CHAT,
     navigateUp = navigateUp,
+    onOpenBenchmarkScreen = onOpenBenchmarkScreen,
     modifier = modifier,
-    sessionId = sessionId,
   )
 }
 
@@ -64,8 +53,8 @@ fun LlmChatScreen(
 fun LlmAskImageScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
+  onOpenBenchmarkScreen: (String) -> Unit,
   modifier: Modifier = Modifier,
-  sessionId: String? = null,
   viewModel: LlmAskImageViewModel = hiltViewModel(),
 ) {
   ChatViewWrapper(
@@ -73,8 +62,8 @@ fun LlmAskImageScreen(
     modelManagerViewModel = modelManagerViewModel,
     taskId = BuiltInTaskId.LLM_ASK_IMAGE,
     navigateUp = navigateUp,
+    onOpenBenchmarkScreen = onOpenBenchmarkScreen,
     modifier = modifier,
-    sessionId = sessionId,
   )
 }
 
@@ -82,8 +71,8 @@ fun LlmAskImageScreen(
 fun LlmAskAudioScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
+  onOpenBenchmarkScreen: (String) -> Unit,
   modifier: Modifier = Modifier,
-  sessionId: String? = null,
   viewModel: LlmAskAudioViewModel = hiltViewModel(),
 ) {
   ChatViewWrapper(
@@ -91,8 +80,8 @@ fun LlmAskAudioScreen(
     modelManagerViewModel = modelManagerViewModel,
     taskId = BuiltInTaskId.LLM_ASK_AUDIO,
     navigateUp = navigateUp,
+    onOpenBenchmarkScreen = onOpenBenchmarkScreen,
     modifier = modifier,
-    sessionId = sessionId,
   )
 }
 
@@ -102,64 +91,11 @@ fun ChatViewWrapper(
   modelManagerViewModel: ModelManagerViewModel,
   taskId: String,
   navigateUp: () -> Unit,
+  onOpenBenchmarkScreen: (String) -> Unit,
   modifier: Modifier = Modifier,
-  sessionId: String? = null,
 ) {
   val context = LocalContext.current
   val task = modelManagerViewModel.getTaskById(id = taskId)!!
-  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
-  var pendingMissingModelNotice by remember { mutableStateOf<String?>(null) }
-  var missingModelNoticeShown by remember { mutableStateOf(false) }
-  var showMissingModelDialog by remember { mutableStateOf(false) }
-
-  LaunchedEffect(sessionId) {
-    if (sessionId.isNullOrBlank()) {
-      pendingMissingModelNotice = null
-      missingModelNoticeShown = false
-      showMissingModelDialog = false
-      return@LaunchedEffect
-    }
-    val session = viewModel.getSessionInfo(sessionId)
-    if (session != null) {
-      val targetModel = modelManagerViewModel.getModelByName(session.modelName)
-      if (targetModel != null) {
-        pendingMissingModelNotice = null
-        missingModelNoticeShown = false
-        showMissingModelDialog = false
-        if (targetModel.name != modelManagerUiState.selectedModel.name) {
-          modelManagerViewModel.selectModel(targetModel)
-        }
-      } else {
-        pendingMissingModelNotice =
-          "Model '${session.modelName}' is not available. Showing history only."
-        showMissingModelDialog = true
-      }
-    }
-  }
-
-  LaunchedEffect(
-    task.id,
-    modelManagerUiState.selectedModel.name,
-    sessionId,
-  ) {
-    viewModel.initializeSession(
-      model = modelManagerUiState.selectedModel,
-      taskId = task.id,
-      sessionId = sessionId,
-      defaultTitle = task.label,
-    )
-    // Defensive: ensure messages load even if first init ran with stale model before selection.
-    if (!sessionId.isNullOrBlank()) {
-      viewModel.reloadCurrentSessionMessages(modelManagerUiState.selectedModel)
-    }
-    if (!missingModelNoticeShown && !pendingMissingModelNotice.isNullOrBlank()) {
-      viewModel.addMessage(
-        model = modelManagerUiState.selectedModel,
-        message = ChatMessageWarning(content = pendingMissingModelNotice ?: ""),
-      )
-      missingModelNoticeShown = true
-    }
-  }
 
   ChatView(
     task = task,
@@ -169,7 +105,6 @@ fun ChatViewWrapper(
       for (message in messages) {
         viewModel.addMessage(model = model, message = message)
       }
-      viewModel.persistMessages(messages)
 
       var text = ""
       val images: MutableList<Bitmap> = mutableListOf()
@@ -192,6 +127,7 @@ fun ChatViewWrapper(
           input = text,
           images = images,
           audioMessages = audioMessages,
+          allowThinking = task.allowThinking() && model.llmSupportThinking,
           onError = { errorMessage ->
             viewModel.handleError(
               context = context,
@@ -212,6 +148,7 @@ fun ChatViewWrapper(
     onRunAgainClicked = { model, message ->
       if (message is ChatMessageText) {
         viewModel.runAgain(
+          task = task,
           model = model,
           message = message,
           onError = { errorMessage ->
@@ -227,26 +164,11 @@ fun ChatViewWrapper(
       }
     },
     onBenchmarkClicked = { _, _, _, _ -> },
+    onOpenBenchmarkScreen = { model -> onOpenBenchmarkScreen(model.name) },
     onResetSessionClicked = { model -> viewModel.resetSession(task = task, model = model) },
     showStopButtonInInputWhenInProgress = true,
     onStopButtonClicked = { model -> viewModel.stopResponse(model = model) },
     navigateUp = navigateUp,
     modifier = modifier,
   )
-
-  if (showMissingModelDialog && !pendingMissingModelNotice.isNullOrBlank()) {
-    AlertDialog(
-      onDismissRequest = { showMissingModelDialog = false },
-      title = { Text("Model not available") },
-      text = {
-        Text(
-          pendingMissingModelNotice ?: "",
-          style = MaterialTheme.typography.bodyMedium,
-        )
-      },
-      confirmButton = {
-        TextButton(onClick = { showMissingModelDialog = false }) { Text("OK") }
-      },
-    )
-  }
 }

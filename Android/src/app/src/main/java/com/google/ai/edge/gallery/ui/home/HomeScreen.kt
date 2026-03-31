@@ -170,7 +170,6 @@ fun HomeScreen(
   modelManagerViewModel: ModelManagerViewModel,
   tosViewModel: TosViewModel,
   navigateToTaskScreen: (Task) -> Unit,
-  navigateToChatHistory: () -> Unit,
   enableAnimation: Boolean,
   modifier: Modifier = Modifier,
 ) {
@@ -358,11 +357,6 @@ fun HomeScreen(
           ) {
             GalleryTopAppBar(
               title = stringResource(HomeScreenDestination.titleRes),
-              secondaryRightAction =
-                AppBarAction(
-                  actionType = AppBarActionType.CHAT_HISTORY,
-                  actionFn = navigateToChatHistory,
-                ),
               rightAction =
                 AppBarAction(
                   actionType = AppBarActionType.APP_SETTING,

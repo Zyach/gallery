@@ -119,6 +119,43 @@ abstract class ChatViewModel() : ViewModel() {
     return (_uiState.value.messagesByModel[model.name] ?: listOf()).lastOrNull()
   }
 
+  fun getLastMessageWithType(model: Model, type: ChatMessageType): ChatMessage? {
+    return (_uiState.value.messagesByModel[model.name] ?: listOf()).lastOrNull { it.type == type }
+  }
+
+  fun getLastMessageWithTypeAndSide(
+    model: Model,
+    type: ChatMessageType,
+    side: ChatSide,
+  ): ChatMessage? {
+    return (_uiState.value.messagesByModel[model.name] ?: listOf()).lastOrNull {
+      it.type == type && it.side == side
+    }
+  }
+
+  fun updateLastThinkingMessageContentIncrementally(model: Model, partialContent: String) {
+    val newMessagesByModel = _uiState.value.messagesByModel.toMutableMap()
+    val newMessages = newMessagesByModel[model.name]?.toMutableList() ?: mutableListOf()
+    if (newMessages.isNotEmpty()) {
+      val lastMessage = newMessages.last()
+      if (lastMessage is ChatMessageThinking) {
+        val newContent = processLlmResponse(response = "${lastMessage.content}${partialContent}")
+        val newLastMessage =
+          ChatMessageThinking(
+            content = newContent,
+            inProgress = lastMessage.inProgress,
+            side = lastMessage.side,
+            accelerator = lastMessage.accelerator,
+          )
+        newMessages.removeAt(newMessages.size - 1)
+        newMessages.add(newLastMessage)
+      }
+    }
+    newMessagesByModel[model.name] = newMessages
+    val newUiState = _uiState.value.copy(messagesByModel = newMessagesByModel)
+    _uiState.update { newUiState }
+  }
+
   fun updateLastTextMessageContentIncrementally(
     model: Model,
     partialContent: String,

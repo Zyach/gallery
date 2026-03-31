@@ -27,6 +27,7 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import dagger.Module
 import dagger.Provides
@@ -57,12 +58,13 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: (String) -> Unit,
   ) {
-    LlmChatModelHelper.initialize(
+    model.runtimeHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
+      systemInstruction = null,
     )
   }
 
@@ -72,7 +74,7 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: () -> Unit,
   ) {
-    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
+    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable
@@ -81,6 +83,7 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     LlmSingleTurnScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
+      onOpenBenchmarkScreen = myData.onOpenBenchmarkScreen,
     )
   }
 }

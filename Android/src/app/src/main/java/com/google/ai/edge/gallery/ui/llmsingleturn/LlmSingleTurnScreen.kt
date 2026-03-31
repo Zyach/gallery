@@ -69,6 +69,7 @@ private const val TAG = "AGLlmSingleTurnScreen"
 fun LlmSingleTurnScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
+  onOpenBenchmarkScreen: (String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: LlmSingleTurnViewModel = hiltViewModel(),
 ) {
@@ -132,6 +133,7 @@ fun LlmSingleTurnScreen(
         modelManagerViewModel = modelManagerViewModel,
         inProgress = uiState.inProgress,
         modelPreparing = uiState.preparing,
+        onBenchmarkScreenClicked = { model -> onOpenBenchmarkScreen(model.name) },
         onConfigChanged = { _, _ -> },
         onBackClicked = { handleNavigateUp() },
         onModelSelected = { prevModel, newSelectedModel ->

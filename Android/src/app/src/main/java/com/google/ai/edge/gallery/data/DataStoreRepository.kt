@@ -18,6 +18,10 @@ package com.google.ai.edge.gallery.data
 
 import androidx.datastore.core.DataStore
 import com.google.ai.edge.gallery.proto.AccessTokenData
+import com.google.ai.edge.gallery.proto.BenchmarkResult
+import com.google.ai.edge.gallery.proto.BenchmarkResults
+import com.google.ai.edge.gallery.proto.Cutout
+import com.google.ai.edge.gallery.proto.CutoutCollection
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Theme
@@ -48,12 +52,46 @@ interface DataStoreRepository {
   fun isTosAccepted(): Boolean
 
   fun acceptTos()
+
+  fun isGemmaTermsOfUseAccepted(): Boolean
+
+  fun acceptGemmaTermsOfUse()
+
+  fun getHasRunTinyGarden(): Boolean
+
+  fun setHasRunTinyGarden(value: Boolean)
+
+  fun addCutout(cutout: Cutout)
+
+  fun getAllCutouts(): List<Cutout>
+
+  fun setCutout(newCutout: Cutout)
+
+  fun setCutouts(cutouts: List<Cutout>)
+
+  fun setHasSeenBenchmarkComparisonHelp(seen: Boolean)
+
+  fun getHasSeenBenchmarkComparisonHelp(): Boolean
+
+  fun addBenchmarkResult(result: BenchmarkResult)
+
+  fun getAllBenchmarkResults(): List<BenchmarkResult>
+
+  fun deleteBenchmarkResult(index: Int)
+
+  fun addViewedPromoId(promoId: String)
+
+  fun removeViewedPromoId(promoId: String)
+
+  fun hasViewedPromo(promoId: String): Boolean
 }
 
 /** Repository for managing data using Proto DataStore. */
 class DefaultDataStoreRepository(
   private val dataStore: DataStore<Settings>,
   private val userDataDataStore: DataStore<UserData>,
+  private val cutoutDataStore: DataStore<CutoutCollection>,
+  private val benchmarkResultsDataStore: DataStore<BenchmarkResults>,
 ) : DataStoreRepository {
   override fun saveTextInputHistory(history: List<String>) {
     runBlocking {
@@ -148,6 +186,122 @@ class DefaultDataStoreRepository(
   override fun acceptTos() {
     runBlocking {
       dataStore.updateData { settings -> settings.toBuilder().setIsTosAccepted(true).build() }
+    }
+  }
+
+  override fun isGemmaTermsOfUseAccepted(): Boolean {
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.isGemmaTermsAccepted
+    }
+  }
+
+  override fun acceptGemmaTermsOfUse() {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setIsGemmaTermsAccepted(true).build() }
+    }
+  }
+
+  override fun getHasRunTinyGarden(): Boolean {
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.hasRunTinyGarden
+    }
+  }
+
+  override fun setHasRunTinyGarden(value: Boolean) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setHasRunTinyGarden(value).build() }
+    }
+  }
+
+  override fun addCutout(cutout: Cutout) {
+    runBlocking {
+      cutoutDataStore.updateData { cutouts -> cutouts.toBuilder().addCutout(cutout).build() }
+    }
+  }
+
+  override fun getAllCutouts(): List<Cutout> {
+    return runBlocking { cutoutDataStore.data.first().cutoutList }
+  }
+
+  override fun setCutout(newCutout: Cutout) {
+    runBlocking {
+      cutoutDataStore.updateData { cutouts ->
+        var index = -1
+        for (i in 0 until cutouts.cutoutCount) {
+          val cutout = cutouts.cutoutList[i]
+          if (cutout.id == newCutout.id) {
+            index = i
+            break
+          }
+        }
+        if (index >= 0) cutouts.toBuilder().setCutout(index, newCutout).build() else cutouts
+      }
+    }
+  }
+
+  override fun setCutouts(cutouts: List<Cutout>) {
+    runBlocking {
+      cutoutDataStore.updateData { CutoutCollection.newBuilder().addAllCutout(cutouts).build() }
+    }
+  }
+
+  override fun setHasSeenBenchmarkComparisonHelp(seen: Boolean) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setHasSeenBenchmarkComparisonHelp(seen).build()
+      }
+    }
+  }
+
+  override fun getHasSeenBenchmarkComparisonHelp(): Boolean {
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.hasSeenBenchmarkComparisonHelp
+    }
+  }
+
+  override fun addBenchmarkResult(result: BenchmarkResult) {
+    runBlocking {
+      benchmarkResultsDataStore.updateData { results ->
+        results.toBuilder().addResult(0, result).build()
+      }
+    }
+  }
+
+  override fun getAllBenchmarkResults(): List<BenchmarkResult> {
+    return runBlocking { benchmarkResultsDataStore.data.first().resultList }
+  }
+
+  override fun deleteBenchmarkResult(index: Int) {
+    runBlocking {
+      benchmarkResultsDataStore.updateData { results -> results.toBuilder().removeResult(index).build() }
+    }
+  }
+
+  override fun addViewedPromoId(promoId: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        if (settings.viewedPromoIdList.contains(promoId)) settings
+        else settings.toBuilder().addViewedPromoId(promoId).build()
+      }
+    }
+  }
+
+  override fun removeViewedPromoId(promoId: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        val newList = settings.viewedPromoIdList.filter { it != promoId }
+        settings.toBuilder().clearViewedPromoId().addAllViewedPromoId(newList).build()
+      }
+    }
+  }
+
+  override fun hasViewedPromo(promoId: String): Boolean {
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.viewedPromoIdList.contains(promoId)
     }
   }
 
