@@ -26,11 +26,12 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - Thinking mode: parseo de `<think>` tags implementado en `LlmChatModelHelper`.
 - Benchmark: ruta dedicada y botón en app bar.
 - HTTP service: bindeado a `127.0.0.1`, errores JSON, payload logging opt-in, Bearer token configurable.
-- CI: build debug + release, unit tests, lint (GitHub Actions).
+- CI: build debug + release automático en GitHub Actions sobre cambios relevantes del código.
 
 ### Gaps activos
 
 - Tests: zero tests en el repositorio.
+- El workflow `Android APK` actual verifica compilación, no batería de tests.
 - HTTP stateless: pendiente reset conversation por request.
 - Validación funcional de thinking/benchmark en dispositivo.
 

@@ -24,7 +24,7 @@ Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garde
 - [x] Fix error silencioso single-turn
 - [x] Cap retry loop resetSession
 - [ ] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags)
-- [x] CI: tests + lint + release build
+- [x] CI: build automático relevante tras push
 
 ### Fase C — Arquitectura
 - [ ] Extraer LlmHttpService en componentes (ModelResolver, InferenceGateway, ApiRenderer)

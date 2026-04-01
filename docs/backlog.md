@@ -28,7 +28,7 @@
 ## P1
 
 - [ ] `TEST-02` 15-20 tests JVM
-- [x] `CI-01` CI: tests + lint + release build
+- [x] `CI-01` CI: build automático relevante tras push
 - [x] `HTTP-02` Rechazar model IDs desconocidos con 404
 - [ ] `RUNTIME-01` Completar migración runtimeHelper
 - [ ] `HTTP-01` Smoke tests del puente local
