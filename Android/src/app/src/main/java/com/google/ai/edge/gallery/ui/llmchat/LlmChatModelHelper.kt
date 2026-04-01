@@ -204,6 +204,7 @@ object LlmChatModelHelper : LlmModelHelper {
             is Backend.NPU -> supportsNpu
             is Backend.GPU -> supportsGpu
             is Backend.CPU -> supportsCpu
+            else -> false
           }
         }.ifEmpty { listOf(Backend.CPU()) }
       } else {
