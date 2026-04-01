@@ -20,6 +20,8 @@ Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garde
 - [x] Inferencia stateless por request
 - [x] Rechazar model IDs desconocidos con 404
 
+Nota: la siguiente capa de cierre para HTTP ya no es hardening básico sino smoke/contract validation del bridge.
+
 ### Fase B — Safety net
 - [x] Fix error silencioso single-turn
 - [x] Cap retry loop resetSession

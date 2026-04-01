@@ -27,4 +27,24 @@ class LlmHttpBridgeUtilsTest {
     assertFalse(LlmHttpBridgeUtils.isBearerAuthorized("secret", "Bearer wrong"))
     assertFalse(LlmHttpBridgeUtils.isBearerAuthorized("secret", "secret"))
   }
+
+  @Test
+  fun resolveRequestedModelIdFallsBackToLocal() {
+    assertEquals("local", LlmHttpBridgeUtils.resolveRequestedModelId(null))
+    assertEquals("local", LlmHttpBridgeUtils.resolveRequestedModelId(""))
+    assertEquals("local", LlmHttpBridgeUtils.resolveRequestedModelId("   "))
+  }
+
+  @Test
+  fun resolveRequestedModelIdTrimsUserInput() {
+    assertEquals("gemma3", LlmHttpBridgeUtils.resolveRequestedModelId("  gemma3  "))
+  }
+
+  @Test
+  fun escapeSseTextEscapesBackslashesQuotesAndNewlines() {
+    assertEquals("hello", LlmHttpBridgeUtils.escapeSseText("hello"))
+    assertEquals("line1\\nline2", LlmHttpBridgeUtils.escapeSseText("line1\nline2"))
+    assertEquals("say \\\"hi\\\"", LlmHttpBridgeUtils.escapeSseText("say \"hi\""))
+    assertEquals("back\\\\slash", LlmHttpBridgeUtils.escapeSseText("back\\slash"))
+  }
 }

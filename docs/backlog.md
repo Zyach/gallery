@@ -33,6 +33,7 @@
 - [ ] `RUNTIME-01` Completar migración runtimeHelper
   - Estado: iniciada con unificación de benchmark y cancelación sobre `LlmModelHelper`.
 - [ ] `HTTP-01` Smoke tests del puente local
+  - Estado: la cobertura JVM del contrato HTTP sigue creciendo, pero faltan pruebas end-to-end del servicio vivo.
 - [x] `DOC-02` Divergencias deliberadas documentadas
 
 ---
@@ -57,6 +58,7 @@
 - [x] Workflow dedicado de tests JVM separado del workflow de build Android.
 - [x] Inicio de `RUNTIME-01` con benchmark/cancelación encaminados a `LlmModelHelper`.
 - [x] Inicio de `ARCH-02/03` con parser compartido del allowlist basado en `kotlinx.serialization`.
+- [x] Ampliacion de helpers y tests JVM del contrato del bridge HTTP.
 - [x] Bind loopback explícito (SEC-01)
 - [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
 - [x] Reset conversacional por request para mantener la API HTTP stateless (SEC-03)

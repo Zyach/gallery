@@ -171,8 +171,7 @@ class LlmHttpService : Service() {
   }
 
   private fun resolveModelId(requested: String?): String {
-    if (requested.isNullOrBlank()) return "local"
-    return requested
+    return LlmHttpBridgeUtils.resolveRequestedModelId(requested)
   }
 
   private fun selectModel(requestedModel: String?): Model? {
@@ -631,9 +630,7 @@ class LlmHttpService : Service() {
       val msgId = "msg-$now"
 
       fun esc(s: String): String = s
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
+        .let(LlmHttpBridgeUtils::escapeSseText)
 
       fun emit(event: String, payload: String): String =
         "event: $event\n" + "data: $payload\n\n"

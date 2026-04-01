@@ -37,6 +37,7 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - GitHub Actions separa ahora build Android y tests JVM en workflows distintos.
 - `RUNTIME-01` ya está iniciado, pero no completado: aún faltan más flujos y limpieza de contratos alrededor del helper.
 - `ARCH-02` y `ARCH-03` ya están iniciadas, pero no cerradas: el allowlist aún tiene deuda residual fuera del parser compartido.
+- `HTTP-01` avanza por la vía JVM/pura del contrato del bridge, pero faltan smoke tests end-to-end contra el servicio vivo.
 - Validación funcional de thinking/benchmark en dispositivo.
 
 ---
