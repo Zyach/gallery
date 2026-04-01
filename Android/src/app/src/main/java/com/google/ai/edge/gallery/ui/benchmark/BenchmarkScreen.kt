@@ -94,9 +94,7 @@ fun BenchmarkScreen(
   var enableBackButton by remember { mutableStateOf(true) }
   var showRunBenchmarkConfirmationDialog by remember { mutableStateOf(false) }
   val downloadedLlmModelNames =
-    remember(modelManagerViewModel) {
-      modelManagerViewModel.getAllDownloadedModels().filter { model -> model.isLlm }.map { model -> model.name }
-    }
+    modelManagerViewModel.getAllDownloadedModels().filter { it.isLlm }.map { it.name }
   var selectedModelName by remember { mutableStateOf(initialModel.name) }
   var selectedModel by
     remember(selectedModelName) {
