@@ -27,10 +27,11 @@
 
 ## P1
 
-- [ ] `TEST-02` 15-20 tests JVM
+- [x] `TEST-02` 15-20 tests JVM
 - [x] `CI-01` CI: build automático relevante tras push
 - [x] `HTTP-02` Rechazar model IDs desconocidos con 404
 - [ ] `RUNTIME-01` Completar migración runtimeHelper
+  - Estado: iniciada con unificación de benchmark y cancelación sobre `LlmModelHelper`.
 - [ ] `HTTP-01` Smoke tests del puente local
 - [x] `DOC-02` Divergencias deliberadas documentadas
 
@@ -50,6 +51,9 @@
 ## Hecho en este ciclo
 
 - [x] Base inicial de tests JVM para parseo de thinking y helpers puros del bridge HTTP.
+- [x] Ampliacion de tests JVM para serializers proto y helpers puros de tareas.
+- [x] Workflow dedicado de tests JVM separado del workflow de build Android.
+- [x] Inicio de `RUNTIME-01` con benchmark/cancelación encaminados a `LlmModelHelper`.
 - [x] Bind loopback explícito (SEC-01)
 - [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
 - [x] Reset conversacional por request para mantener la API HTTP stateless (SEC-03)

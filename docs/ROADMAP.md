@@ -23,7 +23,7 @@ Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garde
 ### Fase B — Safety net
 - [x] Fix error silencioso single-turn
 - [x] Cap retry loop resetSession
-- [ ] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags) — base inicial ya añadida
+- [x] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags)
 - [x] CI: build automático relevante tras push
 
 ### Fase C — Arquitectura
@@ -32,7 +32,7 @@ Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garde
 - [ ] Estandarizar kotlinx.serialization (eliminar Gson del servicio)
 
 ### Fase D — Runtime y convergencia upstream
-- [ ] Completar migración runtimeHelper (cancelación/benchmark via helper)
+- [ ] Completar migración runtimeHelper (cancelación/benchmark via helper) — iniciada
 - [ ] Convergencia por batches temáticos con upstream
 - [ ] Validación funcional thinking + benchmark en dispositivo
 

@@ -25,14 +25,16 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - App Compose/Hilt con runtime helper abstracto (`LlmModelHelper`).
 - Thinking mode: parseo de `<think>` extraído a acumulador dedicado para streaming robusto, incluyendo tags partidos entre chunks.
 - Benchmark: ruta dedicada y botón en app bar.
+- Runtime helper: benchmark y cancelación empiezan a unificarse bajo `LlmModelHelper`.
 - HTTP service: bindeado a `127.0.0.1`, errores JSON, payload logging opt-in, Bearer token configurable y reset conversacional por request.
 - CI: build debug + release automático en GitHub Actions sobre cambios relevantes del código.
 - GitHub hygiene del fork: issue forms, Dependabot, release workflow por tag, release notes config, CODEOWNERS, SECURITY/SUPPORT y docs index.
 
 ### Gaps activos
 
-- Tests: existe ya una base JVM pequeña para lógica pura, pero `TEST-02` sigue lejos del objetivo 15-20.
-- El workflow `Android APK` actual verifica compilación, no batería de tests.
+- Tests: `TEST-02` queda cubierto con una base JVM de 20+ casos sobre thinking parser, helpers HTTP, serializers proto y helpers de tasks.
+- GitHub Actions separa ahora build Android y tests JVM en workflows distintos.
+- `RUNTIME-01` ya está iniciado, pero no completado: aún faltan más flujos y limpieza de contratos alrededor del helper.
 - Validación funcional de thinking/benchmark en dispositivo.
 
 ---

@@ -59,6 +59,7 @@ Primary living docs:
 This fork assumes GitHub Actions is the authoritative Android build path when local SDK/tooling is unavailable.
 
 - Build workflow: [`.github/workflows/android-apk.yml`](.github/workflows/android-apk.yml)
+- JVM tests workflow: [`.github/workflows/jvm-tests.yml`](.github/workflows/jvm-tests.yml)
 - Release workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 - Releases: https://github.com/Zyach/gallery/releases
 
