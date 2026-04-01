@@ -91,10 +91,18 @@ fun BenchmarkScreen(
   onBackClicked: () -> Unit,
 ) {
   val uiState by viewModel.uiState.collectAsState()
+  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   var enableBackButton by remember { mutableStateOf(true) }
   var showRunBenchmarkConfirmationDialog by remember { mutableStateOf(false) }
   val downloadedLlmModelNames =
-    modelManagerViewModel.getAllDownloadedModels().filter { it.isLlm }.map { it.name }
+    modelManagerUiState.tasks
+      .flatMap { task -> task.models }
+      .distinctBy { model -> model.name }
+      .filter { model ->
+        model.isLlm &&
+          modelManagerUiState.modelDownloadStatus[model.name]?.status == ModelDownloadStatusType.SUCCEEDED
+      }
+      .map { model -> model.name }
   var selectedModelName by remember { mutableStateOf(initialModel.name) }
   var selectedModel by
     remember(selectedModelName) {
