@@ -11,6 +11,10 @@
 
 The Google AI Edge Gallery is an experimental app that puts the power of cutting-edge Generative AI models directly into your hands, running entirely on your Android *(available now)* and iOS *(available now via TestFlight)* devices. Dive into a world of creative and practical AI use cases, all running locally, without needing an internet connection once the model is loaded. Experiment with different models, chat, ask questions with images and audio clip, explore prompts, and more!
 
+## Personal note from the project owner
+
+I am not a software developer and I do not know programming languages professionally. This project has been built purely through vibe coding, iterative testing, and continuous refinement with AI assistance.
+
 > [!IMPORTANT]
 > You must uninstall all previous versions of the app before installing this one. Past versions will no longer be working and supported.
 
