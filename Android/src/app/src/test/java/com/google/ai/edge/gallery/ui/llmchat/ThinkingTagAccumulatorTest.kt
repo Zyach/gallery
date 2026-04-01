@@ -45,7 +45,7 @@ class ThinkingTagAccumulatorTest {
   fun supportsCloseTagSplitAcrossChunks() {
     val parser = ThinkingTagAccumulator()
 
-    assertEquals(emptyList(), parser.consume("<think>"))
+    assertEquals(emptyList<ThinkingParseChunk>(), parser.consume("<think>"))
     assertEquals(listOf(ThinkingParseChunk(thinking = "reason")), parser.consume("reason</th"))
     assertEquals(listOf(ThinkingParseChunk(text = "answer")), parser.consume("ink>answer"))
   }
@@ -62,7 +62,7 @@ class ThinkingTagAccumulatorTest {
   fun flushesPendingThinkingOnFinish() {
     val parser = ThinkingTagAccumulator()
 
-    assertEquals(emptyList(), parser.consume("<think>reason</th"))
+    assertEquals(emptyList<ThinkingParseChunk>(), parser.consume("<think>reason</th"))
     assertEquals(ThinkingParseChunk(thinking = "reason</th"), parser.finish())
   }
 }

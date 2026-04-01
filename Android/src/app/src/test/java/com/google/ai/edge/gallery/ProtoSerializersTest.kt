@@ -22,7 +22,6 @@ class ProtoSerializersTest {
   fun settingsSerializerRoundTripsProto() = runBlocking {
     val original =
       Settings.newBuilder()
-        .setSupportThinking(true)
         .setHasSeenBenchmarkComparisonHelp(true)
         .addTextInputHistory("hello")
         .build()
