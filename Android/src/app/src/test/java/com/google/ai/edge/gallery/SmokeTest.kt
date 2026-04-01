@@ -22,7 +22,7 @@ class SmokeTest {
     assertEquals(0, openIdx)
     val afterOpen = input.substring(openIdx + "<think>".length)
     val closeIdx = afterOpen.indexOf("</think>")
-    assertEquals(15, closeIdx)
+    assertEquals(14, closeIdx)
     val thinking = afterOpen.substring(0, closeIdx)
     assertEquals("reasoning here", thinking)
     val answer = afterOpen.substring(closeIdx + "</think>".length)

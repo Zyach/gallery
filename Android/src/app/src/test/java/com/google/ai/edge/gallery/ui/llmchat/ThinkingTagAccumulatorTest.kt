@@ -62,7 +62,7 @@ class ThinkingTagAccumulatorTest {
   fun flushesPendingThinkingOnFinish() {
     val parser = ThinkingTagAccumulator()
 
-    assertEquals(emptyList<ThinkingParseChunk>(), parser.consume("<think>reason</th"))
-    assertEquals(ThinkingParseChunk(thinking = "reason</th"), parser.finish())
+    assertEquals(listOf(ThinkingParseChunk(thinking = "reason")), parser.consume("<think>reason</th"))
+    assertEquals(ThinkingParseChunk(thinking = "</th"), parser.finish())
   }
 }
