@@ -41,7 +41,9 @@
 
 - [ ] `ARCH-01` Extraer LlmHttpService en componentes
 - [ ] `ARCH-02` Unificar allowlist app/servicio
+  - Estado: parser compartido del allowlist ya reutilizado por servicio y model manager.
 - [ ] `ARCH-03` Estandarizar kotlinx.serialization
+  - Estado: Gson ya no se usa en las rutas del allowlist; quedan otras rutas JSON genéricas fuera de este lote.
 - [ ] `STREAM-01` SSE streaming real
 - [ ] `PERF-01` Eliminar runBlocking en DataStoreRepository
 - [ ] `BUILD-02` Release signing + minify
@@ -54,6 +56,7 @@
 - [x] Ampliacion de tests JVM para serializers proto y helpers puros de tareas.
 - [x] Workflow dedicado de tests JVM separado del workflow de build Android.
 - [x] Inicio de `RUNTIME-01` con benchmark/cancelación encaminados a `LlmModelHelper`.
+- [x] Inicio de `ARCH-02/03` con parser compartido del allowlist basado en `kotlinx.serialization`.
 - [x] Bind loopback explícito (SEC-01)
 - [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
 - [x] Reset conversacional por request para mantener la API HTTP stateless (SEC-03)

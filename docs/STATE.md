@@ -27,6 +27,7 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - Benchmark: ruta dedicada y botón en app bar.
 - Runtime helper: benchmark y cancelación empiezan a unificarse bajo `LlmModelHelper`.
 - HTTP service: bindeado a `127.0.0.1`, errores JSON, payload logging opt-in, Bearer token configurable y reset conversacional por request.
+- Allowlist: el parser compartido empieza a unificarse entre app y servicio con `kotlinx.serialization`.
 - CI: build debug + release automático en GitHub Actions sobre cambios relevantes del código.
 - GitHub hygiene del fork: issue forms, Dependabot, release workflow por tag, release notes config, CODEOWNERS, SECURITY/SUPPORT y docs index.
 
@@ -35,6 +36,7 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - Tests: `TEST-02` queda cubierto con una base JVM de 20+ casos sobre thinking parser, helpers HTTP, serializers proto y helpers de tasks.
 - GitHub Actions separa ahora build Android y tests JVM en workflows distintos.
 - `RUNTIME-01` ya está iniciado, pero no completado: aún faltan más flujos y limpieza de contratos alrededor del helper.
+- `ARCH-02` y `ARCH-03` ya están iniciadas, pero no cerradas: el allowlist aún tiene deuda residual fuera del parser compartido.
 - Validación funcional de thinking/benchmark en dispositivo.
 
 ---

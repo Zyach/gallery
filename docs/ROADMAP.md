@@ -28,8 +28,8 @@ Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garde
 
 ### Fase C — Arquitectura
 - [ ] Extraer LlmHttpService en componentes (ModelResolver, InferenceGateway, ApiRenderer)
-- [ ] Unificar allowlist app/servicio
-- [ ] Estandarizar kotlinx.serialization (eliminar Gson del servicio)
+- [ ] Unificar allowlist app/servicio — iniciada
+- [ ] Estandarizar kotlinx.serialization (eliminar Gson del servicio) — iniciada
 
 ### Fase D — Runtime y convergencia upstream
 - [ ] Completar migración runtimeHelper (cancelación/benchmark via helper) — iniciada

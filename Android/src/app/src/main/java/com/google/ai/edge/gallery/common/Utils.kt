@@ -60,6 +60,11 @@ inline fun <reified T> getJsonResponse(url: String): JsonObjAndTextContent<T>? {
       val inputStream = connection.inputStream
       val response = inputStream.bufferedReader().use { it.readText() }
 
+      if (T::class == String::class) {
+        @Suppress("UNCHECKED_CAST")
+        return JsonObjAndTextContent(jsonObj = response as T, textContent = response)
+      }
+
       val gson = Gson()
       val jsonObj = gson.fromJson(response, T::class.java)
       return JsonObjAndTextContent(jsonObj = jsonObj, textContent = response)

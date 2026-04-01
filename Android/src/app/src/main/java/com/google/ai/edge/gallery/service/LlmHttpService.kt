@@ -17,9 +17,9 @@ import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import com.google.ai.edge.gallery.data.AllowedModel
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelAllowlist
+import com.google.ai.edge.gallery.data.ModelAllowlistJson
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
-import com.google.gson.Gson
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -138,7 +138,7 @@ class LlmHttpService : Service() {
       }
       if (file.exists()) {
         val content = file.readText()
-        val allowlist = Gson().fromJson(content, ModelAllowlist::class.java)
+        val allowlist = ModelAllowlistJson.decode(content)
         lastAllowlistSource = "external:${file.absolutePath}"
         Log.i(logTag, "Loaded model_allowlist.json models=${allowlist?.models?.size ?: 0} source=$lastAllowlistSource")
         return allowlist
@@ -147,7 +147,7 @@ class LlmHttpService : Service() {
       // Fallback: bundled allowlist in assets.
       val assetStream = assets.open("model_allowlist.json")
       val assetText = InputStreamReader(assetStream).readText()
-      val allowlist = Gson().fromJson(assetText, ModelAllowlist::class.java)
+      val allowlist = ModelAllowlistJson.decode(assetText)
       lastAllowlistSource = "asset"
       Log.i(logTag, "Loaded asset model_allowlist.json models=${allowlist?.models?.size ?: 0} source=$lastAllowlistSource")
       allowlist

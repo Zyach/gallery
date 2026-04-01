@@ -16,18 +16,21 @@
 
 package com.google.ai.edge.gallery.data
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class DefaultConfig(
-  @SerializedName("topK") val topK: Int?,
-  @SerializedName("topP") val topP: Float?,
-  @SerializedName("temperature") val temperature: Float?,
-  @SerializedName("accelerators") val accelerators: String?,
-  @SerializedName("maxContextLength") val maxContextLength: Int?,
-  @SerializedName("maxTokens") val maxTokens: Int?,
+  @SerialName("topK") val topK: Int? = null,
+  @SerialName("topP") val topP: Float? = null,
+  @SerialName("temperature") val temperature: Float? = null,
+  @SerialName("accelerators") val accelerators: String? = null,
+  @SerialName("maxContextLength") val maxContextLength: Int? = null,
+  @SerialName("maxTokens") val maxTokens: Int? = null,
 )
 
 /** A model in the model allowlist. */
+@Serializable
 data class AllowedModel(
   val name: String,
   val modelId: String,
@@ -35,7 +38,7 @@ data class AllowedModel(
   val description: String,
   val sizeInBytes: Long,
   val commitHash: String? = null,
-  @SerializedName("version") val version: String? = null,
+  @SerialName("version") val version: String? = null,
   val defaultConfig: DefaultConfig,
   val taskTypes: List<String>,
   val disabled: Boolean? = null,
@@ -140,4 +143,5 @@ data class AllowedModel(
 }
 
 /** The model allowlist. */
+@Serializable
 data class ModelAllowlist(val models: List<AllowedModel>)

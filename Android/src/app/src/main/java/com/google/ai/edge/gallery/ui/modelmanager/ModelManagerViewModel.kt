@@ -38,6 +38,7 @@ import com.google.ai.edge.gallery.data.EMPTY_MODEL
 import com.google.ai.edge.gallery.data.IMPORTS_DIR
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelAllowlist
+import com.google.ai.edge.gallery.data.ModelAllowlistJson
 import com.google.ai.edge.gallery.data.ModelDownloadStatus
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.RuntimeType
@@ -47,7 +48,6 @@ import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
-import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -778,8 +778,14 @@ constructor(
           val url =
             "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists/${BuildConfig.VERSION_NAME.replace(".", "_")}.json"
           Log.d(TAG, "Loading model allowlist from internet. Url: $url")
-          val data = getJsonResponse<ModelAllowlist>(url = url)
-          modelAllowlist = data?.jsonObj
+          val data = getJsonResponse<String>(url = url)
+          modelAllowlist =
+            try {
+              data?.jsonObj?.let { ModelAllowlistJson.decode(it) }
+            } catch (e: Exception) {
+              Log.e(TAG, "Failed to decode model allowlist from internet", e)
+              null
+            }
 
           if (modelAllowlist == null) {
             Log.w(TAG, "Failed to load model allowlist from internet. Trying to load it from disk")
@@ -880,8 +886,7 @@ constructor(
         val content = file.readText()
         Log.d(TAG, "Model allowlist content from local file: $content")
 
-        val gson = Gson()
-        return gson.fromJson(content, ModelAllowlist::class.java)
+        return ModelAllowlistJson.decode(content)
       }
     } catch (e: Exception) {
       Log.e(TAG, "failed to read model allowlist from disk", e)
