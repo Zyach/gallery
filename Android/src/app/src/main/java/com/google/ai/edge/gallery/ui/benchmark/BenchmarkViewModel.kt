@@ -27,9 +27,8 @@ import com.google.ai.edge.gallery.proto.LlmBenchmarkBasicInfo
 import com.google.ai.edge.gallery.proto.LlmBenchmarkResult
 import com.google.ai.edge.gallery.proto.LlmBenchmarkStats
 import com.google.ai.edge.gallery.proto.ValueSeries
-import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.ExperimentalApi
-import com.google.ai.edge.litertlm.benchmark
+import com.google.ai.edge.gallery.runtime.BenchmarkConfig
+import com.google.ai.edge.gallery.runtime.runtimeHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -90,7 +89,6 @@ constructor(
     collapseAll()
   }
 
-  @OptIn(ExperimentalApi::class)
   fun runBenchmark(
     model: Model,
     accelerator: String,
@@ -132,34 +130,31 @@ constructor(
         needCleanUpCacheDir = false
       }
       Log.d(TAG, "Using benchmark cache dir: $cacheDirPath")
-      val backend: Backend =
-        when (accelerator.lowercase()) {
-          "gpu" -> Backend.GPU()
-          "npu" -> Backend.NPU(nativeLibraryDir = appContext.applicationInfo.nativeLibraryDir)
-          else -> Backend.CPU()
-        }
-      val modelPath = model.getPath(context = appContext)
       for (i in 0 until runCount) {
         Log.d(TAG, "Start running #$i...")
         val benchmarkInfo =
-          benchmark(
-            modelPath = modelPath,
-            backend = backend,
-            prefillTokens = prefillTokens,
-            decodeTokens = decodeTokens,
-            cacheDir = cacheDirPath,
+          model.runtimeHelper.runBenchmark(
+            context = appContext,
+            model = model,
+            config =
+              BenchmarkConfig(
+                accelerator = accelerator,
+                prefillTokens = prefillTokens,
+                decodeTokens = decodeTokens,
+                cacheDir = cacheDirPath,
+              ),
           )
         Log.d(TAG, "Done #$i")
 
-        val initTimeMs = benchmarkInfo.initTimeInSecond * 1000.0
+        val initTimeMs = benchmarkInfo.initTimeMs
         if (i == 0) {
           firstInitTime = initTimeMs
         } else {
           nonFirstInitTimes.add(initTimeMs)
         }
-        prefillSpeeds.add(benchmarkInfo.lastPrefillTokensPerSecond)
-        decodeSpeeds.add(benchmarkInfo.lastDecodeTokensPerSecond)
-        timesToFirstToken.add(benchmarkInfo.timeToFirstTokenInSecond)
+        prefillSpeeds.add(benchmarkInfo.prefillTokensPerSecond)
+        decodeSpeeds.add(benchmarkInfo.decodeTokensPerSecond)
+        timesToFirstToken.add(benchmarkInfo.timeToFirstTokenSeconds)
 
         // Mark finish for this run.
         setRunProgress(completedRunCount = i + 1)

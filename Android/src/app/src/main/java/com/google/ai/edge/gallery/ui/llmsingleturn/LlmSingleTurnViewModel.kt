@@ -25,7 +25,6 @@ import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageBenchmarkLlmResult
 import com.google.ai.edge.gallery.ui.common.chat.Stat
-import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import com.google.ai.edge.litertlm.ExperimentalApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -227,8 +226,7 @@ class LlmSingleTurnViewModel @Inject constructor() : ViewModel() {
     Log.d(TAG, "Stopping response for model ${model.name}...")
     viewModelScope.launch(Dispatchers.Default) {
       setInProgress(false)
-      val instance = model.instance as LlmModelInstance
-      instance.conversation.cancelProcess()
+      model.runtimeHelper.stopResponse(model)
     }
   }
 

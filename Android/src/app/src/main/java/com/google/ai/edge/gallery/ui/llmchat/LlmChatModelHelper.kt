@@ -100,10 +100,10 @@ object LlmChatModelHelper : LlmModelHelper {
     supportImage: Boolean,
     supportAudio: Boolean,
     onDone: (String) -> Unit,
-    systemInstruction: Contents? = null,
-    tools: List<ToolProvider> = listOf(),
-    enableConversationConstrainedDecoding: Boolean = false,
-    coroutineScope: CoroutineScope? = null,
+    systemInstruction: Contents?,
+    tools: List<ToolProvider>,
+    enableConversationConstrainedDecoding: Boolean,
+    coroutineScope: CoroutineScope?,
   ) {
     initializeInternal(
       context = context,
@@ -184,20 +184,28 @@ object LlmChatModelHelper : LlmModelHelper {
     val preferredOrder =
       when (effectiveAccelerator) {
         Accelerator.NPU.label ->
-          if (fallbackEnabled) listOf(Backend.NPU, Backend.GPU, Backend.CPU) else listOf(Backend.NPU)
+          if (fallbackEnabled) {
+            listOf(
+              Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir),
+              Backend.GPU(),
+              Backend.CPU(),
+            )
+          } else {
+            listOf(Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir))
+          }
         Accelerator.GPU.label ->
-          if (fallbackEnabled) listOf(Backend.GPU, Backend.CPU) else listOf(Backend.GPU)
-        else -> listOf(Backend.CPU)
+          if (fallbackEnabled) listOf(Backend.GPU(), Backend.CPU()) else listOf(Backend.GPU())
+        else -> listOf(Backend.CPU())
       }
     val supportedOrder =
       if (fallbackEnabled) {
         preferredOrder.filter {
           when (it) {
-            Backend.NPU -> supportsNpu
-            Backend.GPU -> supportsGpu
-            Backend.CPU -> supportsCpu
+            is Backend.NPU -> supportsNpu
+            is Backend.GPU -> supportsGpu
+            is Backend.CPU -> supportsCpu
           }
-        }.ifEmpty { listOf(Backend.CPU) }
+        }.ifEmpty { listOf(Backend.CPU()) }
       } else {
         preferredOrder
       }
@@ -215,8 +223,8 @@ object LlmChatModelHelper : LlmModelHelper {
             EngineConfig(
               modelPath = modelPath,
               backend = backend,
-              visionBackend = if (shouldEnableImage) Backend.GPU else null, // must be GPU for Gemma 3n
-              audioBackend = if (shouldEnableAudio) Backend.CPU else null, // must be CPU for Gemma 3n
+              visionBackend = if (shouldEnableImage) Backend.GPU() else null,
+              audioBackend = if (shouldEnableAudio) Backend.CPU() else null,
               maxNumTokens = effectiveMaxTokens,
               cacheDir =
                 if (modelPath.startsWith("/data/local/tmp"))
@@ -268,9 +276,9 @@ object LlmChatModelHelper : LlmModelHelper {
     model: Model,
     supportImage: Boolean,
     supportAudio: Boolean,
-    systemInstruction: Contents? = null,
-    tools: List<ToolProvider> = listOf(),
-    enableConversationConstrainedDecoding: Boolean = false,
+    systemInstruction: Contents?,
+    tools: List<ToolProvider>,
+    enableConversationConstrainedDecoding: Boolean,
   ) {
     resetConversationInternal(
       model = model,

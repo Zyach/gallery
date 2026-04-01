@@ -28,6 +28,20 @@ typealias ResultListener =
 
 typealias CleanUpListener = () -> Unit
 
+data class BenchmarkConfig(
+  val accelerator: String,
+  val prefillTokens: Int,
+  val decodeTokens: Int,
+  val cacheDir: String,
+)
+
+data class BenchmarkRunResult(
+  val initTimeMs: Double,
+  val prefillTokensPerSecond: Double,
+  val decodeTokensPerSecond: Double,
+  val timeToFirstTokenSeconds: Double,
+)
+
 interface LlmModelHelper {
   fun initialize(
     context: Context,
@@ -65,4 +79,6 @@ interface LlmModelHelper {
   )
 
   fun stopResponse(model: Model)
+
+  fun runBenchmark(context: Context, model: Model, config: BenchmarkConfig): BenchmarkRunResult
 }
