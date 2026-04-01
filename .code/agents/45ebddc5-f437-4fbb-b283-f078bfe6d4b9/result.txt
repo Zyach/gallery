@@ -1,0 +1,32 @@
+I've created a comprehensive implementation plan above. Here's a quick summary:
+
+## Key Recommendations
+
+**1. Chat History: Remove Entirely**
+- 10 files to delete (`data/chathistory/`, `ui/history/`)
+- 6 files to modify (AppModule, NavGraph, HomeScreen, LlmChatViewModel, LlmHttpPrefs, SettingsDialog)
+- Rationale: High complexity (~1500+ lines), tight coupling, user stated it's "no longer needed"
+
+**2. HTTP API: Preserve & Harden**
+- Keep `LlmHttpService.kt` and `LlmHttpPrefs.kt` as fork-only additions
+- Remove history-specific prefs, keep HTTP toggle/port/logging/fallback settings
+- Test endpoints after every merge step
+
+**3. Upstream Integration Priority**
+- **P1**: Thinking mode support, ConfigDialog improvements, audio-only messages
+- **P2**: NPU cleanup, empty state improvements
+- **P3**: Internal changes (evaluate case-by-case)
+
+**4. Conflict Hotspots**
+| File | Risk |
+|------|------|
+| `build.gradle.kts` | HIGH - version skew, KSP vs kapt |
+| `AppModule.kt` | HIGH - DI changes |
+| `LlmChatViewModel.kt` | MEDIUM - thinking mode + history removal |
+| `GalleryNavGraph.kt` | MEDIUM - route changes |
+
+**5. Estimated Timeline**: 11-18 hours total across 5 phases
+
+**6. Rollback Strategy**: Create checkpoint branches before each major phase
+
+Would you like me to proceed with implementing this plan, starting with Phase 0 (preparation) and Phase 1 (chat history removal)?

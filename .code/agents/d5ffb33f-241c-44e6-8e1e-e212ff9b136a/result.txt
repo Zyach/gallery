@@ -1,0 +1,406 @@
+Now I have a complete picture. Here's the plan.
+
+---
+
+# Upstream Catch-Up Plan: google-ai-edge/gallery Fork
+
+## Current State Summary
+
+| Metric | Value |
+|---|---|
+| Fork-only commits | 39 |
+| Upstream-only commits | ~100+ |
+| Dirty working tree files | 39 (active refactors) |
+| Upstream-only new files missing from fork | 18 |
+| Files modified in both directions | ~45 |
+| Chat history files pending deletion | 8 |
+
+**Non-negotiable fork additions:** `LlmHttpService.kt` (854 lines), `LlmHttpPrefs.kt` (51 lines), NanoHTTPD dependency, SettingsDialog HTTP section, HF OAuth skip, Room-based chat history (being removed).
+
+---
+
+## Recommended Sync Strategy
+
+**Do NOT attempt `git merge upstream/main`.** The divergence is too deep (39 vs 100+ commits, massive structural changes on both sides, dirty tree). A merge would produce dozens of conflicts in the highest-churn files (HomeScreen, ChatPanel, ChatViewModel, GalleryNavGraph, ModelManagerViewModel) and would be nearly impossible to review.
+
+**Strategy: file-by-file / module-by-module adoption in themed batches**, committing checkpoints after each batch. This is the continuation of your current approach.
+
+The workflow per batch:
+1. `git stash` or commit current dirty state as a WIP checkpoint
+2. `git diff upstream/main HEAD -- <file>` to see what upstream changed
+3. Adopt upstream's version of the file, then re-apply fork-specific patches on top
+4. Build-verify after each batch (`./gradlew assembleDebug` via CI or local)
+5. Commit with a descriptive message
+
+---
+
+## Phase 0: Stabilize Current Working Tree
+**Goal:** Clean checkpoint of everything in-flight so you have a safe rollback point.
+
+### Steps
+1. **Commit the current dirty state as-is** — a WIP checkpoint tagged `pre-upstream-sync-v2`
+2. **Finish chat history removal** — the tree is half-done:
+   - Files already deleted from working tree: `data/chathistory/*`, `ui/history/*`
+   - Still need to unwire from:
+     - `AppModule.kt` — remove Room/ChatHistory DI providers
+     - `build.gradle.kts` — remove Room, SQLCipher, Paging dependencies (these were fork-only additions for chat history; upstream doesn't use them)
+     - `GalleryNavGraph.kt` — remove `ROUTE_CHAT_HISTORY`
+     - `LlmChatViewModel.kt` — remove `ChatHistoryRepository` dependency, simplify `resetSession`
+     - `LlmChatScreen.kt` / `LlmChatTaskModule.kt` — remove `sessionId` parameters
+   - Stage all chat-history deletions together, commit: `"chore: complete chat history removal"`
+3. **Verify build compiles** — this is Gate 0.
+
+### Deliverable
+A clean, building commit with chat history fully excised. Tag: `checkpoint/chat-history-removed`
+
+---
+
+## Phase 1: Build System & Dependencies Alignment
+**Goal:** Get `build.gradle.kts`, `libs.versions.toml`, and `AndroidManifest.xml` aligned with upstream so that subsequent file adoptions compile.
+
+### Conflict Hotspots
+
+| File | Fork Delta | Action |
+|---|---|---|
+| `libs.versions.toml` | Fork: kotlin 2.1.0, composeBom 2025.11.01, litertlm 0.9.0-alpha01. Upstream: kotlin 2.2.0, composeBom 2026.02.00, litertlm 0.9.0. Fork adds Room/SQLCipher/Paging (remove after Phase 0). Fork removes ksp/moshi. | Adopt upstream versions. Keep `nanohttpd` dependency. Remove Room/Paging/SQLCipher (chat history gone). Add back ksp + moshi (needed for upstream's serializers). |
+| `app/build.gradle.kts` | Fork: versionCode 17/1.0.9, adds Room/nanohttpd, removes firebase-messaging/moshi/ksp. Upstream: versionCode 20/1.0.11, adds firebase-messaging, moshi, ksp. | Adopt upstream's dependency set. **Add** `nanohttpd` as fork-only. Remove Room deps. Bump version to upstream's. |
+| `build.gradle.kts` (root) | Fork removed `ksp` plugin. Upstream has it. | Restore ksp plugin. |
+| `AndroidManifest.xml` | Upstream adds FCM service, permissions. Fork has custom manifest tweaks. | Adopt upstream manifest. Re-apply `foregroundServiceType` for `LlmHttpService` if needed. |
+| `settings.proto` | Fork has older version. Upstream added benchmark fields. | Adopt upstream's proto. |
+
+### Steps
+1. Adopt upstream's `libs.versions.toml` verbatim, then add `nanohttpd = "2.3.1"` and the nanohttpd library entry
+2. Adopt upstream's `build.gradle.kts` files, then add `implementation("org.nanohttpd:nanohttpd:2.3.1")` and `kapt` for Hilt
+3. Adopt upstream's `AndroidManifest.xml`, add `LlmHttpService` declaration
+4. Adopt upstream's `settings.proto` and add `benchmark.proto`
+5. Build-verify
+
+### Deliverable
+Commit: `"build: align dependencies and build config with upstream 1.0.11"`. Tag: `checkpoint/build-aligned`
+
+---
+
+## Phase 2: New Upstream Files (No-Conflict Additions)
+**Goal:** Bring in upstream files that are entirely new and don't conflict with anything in the fork.
+
+### Files to add (copy from upstream/main)
+
+**Runtime layer:**
+- `runtime/LlmModelHelper.kt` — new upstream extraction of model helper logic
+- `runtime/ModelHelperExt.kt` — extension functions
+
+**Benchmark system (5 files):**
+- `ui/benchmark/BenchmarkScreen.kt`
+- `ui/benchmark/BenchmarkModelPicker.kt`
+- `ui/benchmark/BenchmarkResultsViewer.kt`
+- `ui/benchmark/BenchmarkValueSeriesViewer.kt`
+- `ui/benchmark/BenchmarkViewModel.kt`
+- `BenchmarkResultsSerializer.kt`, `CutoutsSerializer.kt` (top-level)
+
+**UI utilities:**
+- `ui/common/Accordions.kt`
+- `ui/common/EmptyState.kt`
+- `ui/common/FloatingBanner.kt`
+- `ui/common/GalleryWebView.kt`
+- `ui/common/chat/LogsViewer.kt`
+- `ui/common/chat/MessageBodyCollapsableProgressPanel.kt`
+- `ui/common/chat/MessageBodyWebview.kt`
+- `ui/home/SquareDrawerItem.kt`
+
+**Global model manager:**
+- `ui/modelmanager/GlobalModelManager.kt`
+
+**FCM:**
+- `FcmMessagingService.kt`
+
+**TOS:**
+- `ui/common/tos/GemmaTermsOfUseDialog.kt`
+- Rename `TosDialog.kt` → `AppTosDialog.kt`
+
+**Data:**
+- `data/Consts.kt`
+
+**Docs:**
+- `Function_Calling_Guide.md`
+
+**Allowlist:**
+- `model_allowlists/1_0_10.json`
+
+### Steps
+1. `git checkout upstream/main -- <path>` for each file above
+2. Build-verify (some files may not compile until Phase 3 wires them in — that's expected)
+3. Commit: `"feat: add upstream benchmark, model manager, and UI utility files"`
+
+### Deliverable
+Tag: `checkpoint/new-files-added`
+
+---
+
+## Phase 3: Data Layer Alignment
+**Goal:** Align the core data model files that everything else depends on.
+
+### Files & Approach
+
+| File | Conflict Risk | Strategy |
+|---|---|---|
+| `data/Config.kt` | **HIGH** — fork already partially adopted thinking mode configs. Upstream added `ENABLE_THINKING`, bottom-sheet selector, expanded slider logic. | Diff fork vs upstream, adopt upstream version, re-verify fork's thinking additions are superset. |
+| `data/Model.kt` | MEDIUM — upstream added `showBenchmark`, NPU fields, `isImported` changes. Fork has minor modifications. | Adopt upstream, re-apply any fork-specific fields. |
+| `data/ModelAllowlist.kt` | **HIGH** — upstream significantly refactored (104+ line diff), added compatible accelerators, default configs. Fork has custom LiteRT-LM allowlist logic. | Adopt upstream structure. Verify fork's `model_allowlist.json` asset and LiteRT-LM variants still parse correctly. |
+| `data/Tasks.kt` | MEDIUM — upstream added benchmark task, NPU tasks, modified `allowThinking()`. | Adopt upstream. Ensure fork's task list is a superset. |
+| `data/Types.kt` | LOW | Adopt upstream. |
+| `data/DataStoreRepository.kt` | **HIGH** — upstream added 176+ lines (benchmark prefs, system prompt, cutouts). Fork removed 16 lines. | Adopt upstream wholesale. Fork's removals were chat-history-related and are no longer relevant. |
+| `data/DownloadRepository.kt` | LOW-MEDIUM | Adopt upstream. |
+| `data/AppBarAction.kt` | LOW | Adopt upstream. |
+| `common/Utils.kt` | MEDIUM — upstream added 84 lines of new utility functions. | Adopt upstream. |
+| `common/Types.kt` | LOW | Adopt upstream. |
+| `common/ProjectConfig.kt` | LOW-MEDIUM | Diff and adopt upstream. Re-apply fork's `PERF_PROFILE` if still used. |
+
+### Steps
+1. For each file: `git show upstream/main:<path> > <path>`, then re-apply fork patches
+2. Build-verify after the full batch
+3. Commit: `"data: align Config, Model, ModelAllowlist, Tasks, DataStore with upstream"`
+
+### Deliverable
+Tag: `checkpoint/data-layer-aligned`
+
+---
+
+## Phase 4: Chat/Inference Engine Layer
+**Goal:** Align the LLM chat plumbing — the highest-conflict zone. This is where the fork's HTTP API meets upstream's inference changes.
+
+### Files & Approach
+
+| File | Conflict Risk | Strategy |
+|---|---|---|
+| `ui/llmchat/LlmChatModelHelper.kt` | **CRITICAL** — upstream refactored heavily (125+ lines changed), added NPU backend selection, `LlmModelHelper` extraction. Fork has 127+ lines of custom changes for HTTP service model warmup. | Adopt upstream. Re-apply fork's HTTP-specific `initializeForHttpService()` and `pickDefaultLlmModel()` functions as additive methods (they don't conflict with upstream's core `initialize`/`runInference`). |
+| `ui/llmchat/LlmChatViewModel.kt` | **CRITICAL** — upstream added 272+ lines (thinking mode streaming, system prompt, audio-only messages). Fork added 183+ lines (HTTP session management, tool calls, chat history — history being removed). | Adopt upstream. Graft back fork's `generateResponseForHttp()` and related HTTP-facing methods. Remove all chat history references. |
+| `ui/common/chat/ChatViewModel.kt` | **HIGH** — upstream added 178+ lines (thinking content streaming, config change tracking, expanded message management). Fork added 6 lines. | Adopt upstream wholesale. Fork's additions are minor. |
+| `ui/common/chat/ChatMessage.kt` | **HIGH** — upstream added 138+ lines (thinking message type, audio clips, benchmark results). Fork already partially adopted `ChatMessageThinking`. | Adopt upstream. Verify fork's `MessageBodyThinking.kt` (already in working tree) is compatible with upstream's `ChatMessageThinking` data class. |
+| `ui/common/chat/ChatPanel.kt` | **CRITICAL** — upstream refactored 327+ lines (removed 200+, added new). Fork has modifications. | Adopt upstream. The fork's ChatPanel changes are minor compared to upstream's refactor. |
+| `ui/llmchat/LlmChatScreen.kt` | HIGH — upstream changed 130+ lines. Fork changed 90+ lines (HTTP callbacks, session ID — session ID being removed). | Adopt upstream. Re-apply HTTP-specific callback wiring in `ChatViewWrapper`. |
+| `ui/llmchat/LlmChatTaskModule.kt` | MEDIUM | Adopt upstream. Remove fork's `sessionId` parameters. |
+| `ui/common/chat/MessageInputText.kt` | HIGH — upstream refactored 493 lines. | Adopt upstream verbatim (fork has no meaningful changes here). |
+| `ui/common/chat/MessageBody*.kt` (Text, Image, Loading, ConfigUpdate) | MEDIUM | Adopt upstream versions. |
+| `ui/common/ConfigDialog.kt` | HIGH — upstream added 324+ lines (expanded slider, warning for high tokens, thinking toggle). Fork already partially adopted. | Adopt upstream. Verify fork's partial adoption is compatible. |
+
+### Key Risk: LlmChatModelHelper.kt
+This is the single most dangerous file. Upstream extracted `runtime/LlmModelHelper.kt` as a separate module, and `LlmChatModelHelper.kt` now delegates to it. The fork's HTTP service calls `LlmChatModelHelper.initialize()` and `LlmChatModelHelper.runInference()` directly. After adopting upstream:
+- Verify `LlmHttpService.kt` still compiles against the new signatures
+- The HTTP service's `runInference()` call must match upstream's updated callback signatures (check for `onThinkingUpdate` callback addition)
+- Test: `/v1/chat/completions` must still stream tokens correctly
+
+### Steps
+1. Adopt upstream versions of all files in the table
+2. Re-apply HTTP-specific methods in `LlmChatModelHelper.kt` and `LlmChatViewModel.kt`
+3. Update `LlmHttpService.kt` to match any changed inference API signatures
+4. Build-verify
+5. Commit: `"feat: align chat/inference layer with upstream (thinking, audio, system prompt)"`
+
+### Deliverable
+Tag: `checkpoint/chat-engine-aligned`
+
+---
+
+## Phase 5: Navigation, Home Screen & Model Manager
+**Goal:** Align the UI shell — the second highest-conflict zone.
+
+### Files & Approach
+
+| File | Conflict Risk | Strategy |
+|---|---|---|
+| `ui/navigation/GalleryNavGraph.kt` | **HIGH** — upstream added 157+ lines (benchmark routes, global model manager routes, drawer navigation). Fork has custom routes. | Adopt upstream. Add fork's HTTP-related routes if any (currently none — settings are in a dialog, not a route). |
+| `ui/home/HomeScreen.kt` | **CRITICAL** — 870 lines changed upstream (drawer menu, global model manager, complete layout refactor). Fork has 7+ custom changes. | Adopt upstream wholesale. Re-apply fork's minor additions (settings dialog HTTP trigger, HF OAuth skip UI). |
+| `ui/home/SettingsDialog.kt` | HIGH — upstream changed 19 lines. Fork added 92 lines (entire HTTP API section). | Adopt upstream's base changes. Re-apply the entire HTTP API settings section (lines ~200-267 in current fork). This is clean because the HTTP section is self-contained at the bottom of the dialog. |
+| `ui/home/ModelImportDialog.kt` | MEDIUM — upstream moved to `ui/modelmanager/`, fork kept in `ui/home/`. | **Follow upstream's location** (`ui/modelmanager/ModelImportDialog.kt`). Update imports in `HomeScreen.kt`. |
+| `ui/home/MobileActionsChallengeDialog.kt` | LOW-MEDIUM | Adopt upstream. |
+| `ui/modelmanager/ModelManagerViewModel.kt` | **HIGH** — upstream added 284+ lines. Fork changed 145+ lines. | Adopt upstream. Re-verify fork's model download/init paths still work. |
+| `ui/modelmanager/ModelList.kt`, `ModelManager.kt` | MEDIUM | Adopt upstream. |
+| `ui/common/modelitem/*` (5 files) | MEDIUM | Adopt upstream. |
+| `ui/common/ClickableLink.kt` | MEDIUM | Adopt upstream. |
+| `ui/common/DownloadAndTryButton.kt` | MEDIUM | Adopt upstream. |
+| `ui/common/ModelPageAppBar.kt` | MEDIUM | Adopt upstream. |
+| `ui/common/Utils.kt` | LOW | Adopt upstream. |
+
+### Steps
+1. Adopt upstream's `GalleryNavGraph.kt` — verify all screens referenced exist
+2. Adopt upstream's `HomeScreen.kt` — re-apply HF OAuth skip and HTTP indicator
+3. Adopt upstream's `SettingsDialog.kt` — re-graft the HTTP API section
+4. Move `ModelImportDialog.kt` to upstream's location
+5. Adopt remaining files
+6. Build-verify
+7. Commit: `"feat: align navigation, home screen, and model manager with upstream"`
+
+### Deliverable
+Tag: `checkpoint/ui-shell-aligned`
+
+---
+
+## Phase 6: Remaining Peripheral Files
+**Goal:** Mop up everything else.
+
+### Files
+
+| Category | Files | Action |
+|---|---|---|
+| Tiny Garden | `customtasks/tinygarden/*` (5 files) | Adopt upstream versions (fork already restored these from upstream but may be outdated) |
+| Mobile Actions | `customtasks/mobileactions/*` (5 files) | Adopt upstream |
+| LLM Single Turn | `ui/llmsingleturn/*` (3 files) | Adopt upstream. Fork has minor changes. |
+| Theme | `ui/theme/Theme.kt`, `Type.kt` | Adopt upstream (64+ line changes for new theming) |
+| DI | `di/AppModule.kt` | Adopt upstream. Re-add `LlmHttpPrefs` and `LlmHttpService`-related providers if any. Currently fork's AppModule has Room providers (remove) and no HTTP-specific DI. |
+| Top-level | `GalleryAppTopBar.kt`, `GalleryApplication.kt`, `MainActivity.kt`, `Analytics.kt` | Adopt upstream. Re-apply fork's `LlmHttpService` startup logic in `GalleryApplication.kt` or `MainActivity.kt`. |
+| Worker | `worker/DownloadWorker.kt` | Adopt upstream |
+| Resources | `res/values/strings.xml`, `res/drawable/*`, `res/xml/file_paths.xml` | Adopt upstream. Add fork's HTTP-related strings. |
+| Allowlists | `model_allowlist.json`, `model_allowlists/*` | Adopt upstream's latest. Merge fork's LiteRT-LM custom entries. |
+| README | `README.md` | Keep fork's version (intentionally different). |
+
+### Steps
+1. Batch adopt all files above
+2. Build-verify
+3. Commit: `"chore: align remaining peripheral files with upstream"`
+
+### Deliverable
+Tag: `checkpoint/peripheral-aligned`
+
+---
+
+## Phase 7: HTTP API Hardening & Final Verification
+**Goal:** Ensure `LlmHttpService` works correctly against the fully updated codebase.
+
+### Steps
+
+1. **API Signature Audit** — grep all call sites in `LlmHttpService.kt` for:
+   - `LlmChatModelHelper.initialize()` — verify parameter list matches upstream's new signature
+   - `LlmChatModelHelper.runInference()` — verify callback shape (upstream added `onThinkingUpdate`)
+   - `Model` data class field access — verify no removed/renamed fields
+   - `ModelAllowlist` loading — verify fork's asset-based allowlist still loads
+
+2. **Endpoint Regression Test:**
+   - `GET /ping` → 200
+   - `GET /v1/models` → returns model list
+   - `POST /generate` → streaming token response
+   - `POST /v1/chat/completions` → OpenAI-compatible response
+   - `POST /v1/responses` → responses API
+
+3. **Settings Round-Trip:** Verify SettingsDialog HTTP section toggles actually start/stop the service
+
+4. **Move to dedicated package** (optional but recommended):
+   - `service/LlmHttpService.kt` → `service/http/LlmHttpService.kt`
+   - `data/LlmHttpPrefs.kt` → `service/http/LlmHttpPrefs.kt`
+   - This isolates fork-only code from future upstream merge conflicts
+
+5. Final commit: `"feat: verify and harden HTTP API against upstream-aligned codebase"`
+
+### Deliverable
+Tag: `checkpoint/http-verified`. This is the "upstream parity" tag.
+
+---
+
+## Phase 8: CI/CD Setup
+**Goal:** Use GitHub Actions as the build gate for every phase.
+
+### Current State
+The fork has `.github/workflows/android-apk.yml` that triggers on pushes to `Android/src/` and builds a debug APK. Upstream had `build_android.yaml` (deleted by fork).
+
+### Recommended Actions
+
+1. **Keep the fork's `android-apk.yml`** but enhance it:
+   ```yaml
+   on:
+     push:
+       branches: [main]
+       paths: ['Android/src/**', 'model_allowlist*']
+     pull_request:
+       branches: [main]
+       paths: ['Android/src/**', 'model_allowlist*']
+   ```
+   - Add PR trigger so every phase-checkpoint PR gets build-verified before merge
+
+2. **Add a lint/check step** alongside `assembleDebug`:
+   ```yaml
+   - name: Lint check
+     run: ./gradlew lintDebug
+   ```
+
+3. **Workflow for each phase:** Create a short-lived branch per phase (e.g., `sync/phase-1-build-deps`), push, let CI build, then merge to main. This gives you rollback granularity via branch history.
+
+4. **Do NOT adopt upstream's `build_android.yaml`** — it's configured for upstream's CI environment and will fail in the fork.
+
+---
+
+## Conflict Hotspot Severity Map
+
+```
+CRITICAL (expect 30+ minutes of manual resolution each):
+  ├── HomeScreen.kt            — complete layout refactor upstream
+  ├── LlmChatModelHelper.kt   — inference API changes + fork HTTP layer
+  ├── LlmChatViewModel.kt     — thinking + HTTP + chat history removal intersection
+  └── ChatPanel.kt             — major upstream refactor
+
+HIGH (expect 15-30 minutes each):
+  ├── GalleryNavGraph.kt       — new routes, drawer navigation
+  ├── ChatViewModel.kt         — thinking streaming additions
+  ├── ConfigDialog.kt          — expanded config UI
+  ├── ModelAllowlist.kt        — structural refactor
+  ├── DataStoreRepository.kt   — new proto-based prefs
+  ├── ModelManagerViewModel.kt — global model management
+  └── SettingsDialog.kt        — fork HTTP section + upstream changes
+
+MEDIUM (expect <15 minutes each):
+  ├── Config.kt, Model.kt, Tasks.kt
+  ├── AppModule.kt
+  ├── build.gradle.kts, libs.versions.toml
+  ├── ChatMessage.kt, MessageInputText.kt
+  └── LlmChatScreen.kt, LlmChatTaskModule.kt
+```
+
+---
+
+## Risk Register
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Upstream's `LlmModelHelper` extraction breaks `LlmHttpService` inference calls | **HIGH** — HTTP API stops working | Phase 4 specifically addresses this. Test `/generate` immediately after. |
+| Kotlin 2.1→2.2 upgrade breaks compilation | MEDIUM | Do this in Phase 1 as the very first build change. Fix K2 compiler issues before touching Kotlin source. |
+| LiteRT-LM 0.9.0-alpha01→0.9.0 API changes | MEDIUM | Upstream already has migration commits (`eaf1d6c`). Adopt those. |
+| Compose BOM jump (2025.11→2026.02) causes UI regressions | LOW-MEDIUM | Visual regression only. Test on device after Phase 5. |
+| Firebase Messaging dependency (new in upstream) requires `google-services.json` | LOW | The fork may not have this configured. If not, exclude FCM service. |
+| Proto-DataStore changes break settings persistence | MEDIUM | Users may need to clear app data once after the upgrade. |
+
+---
+
+## Recommended Checkpoint & Rollback Protocol
+
+Before each phase:
+```bash
+git tag checkpoint/<phase-name>-pre
+```
+
+After each phase passes CI:
+```bash
+git tag checkpoint/<phase-name>-post
+```
+
+Rollback for any phase:
+```bash
+git reset --hard checkpoint/<phase-name>-pre
+```
+
+---
+
+## Estimated Phase Ordering (Dependencies)
+
+```
+Phase 0 (stabilize) ──→ Phase 1 (build system) ──→ Phase 2 (new files, no-conflict)
+                                                         │
+                                                         ├──→ Phase 3 (data layer)
+                                                         │         │
+                                                         │         ▼
+                                                         │    Phase 4 (chat/inference) ──→ Phase 7 (HTTP hardening)
+                                                         │
+                                                         └──→ Phase 5 (UI shell) ──→ Phase 6 (peripheral)
+                                                                                          │
+                                                                                          ▼
+                                                                                     Phase 8 (CI)
+```
+
+Phases 3+5 can be parallelized if worked by different people. Phases 4 and 7 are strictly sequential and on the critical path. Phase 8 should ideally be done right after Phase 1 so all subsequent phases benefit from CI.

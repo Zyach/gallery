@@ -1,0 +1,456 @@
+Now I have everything I need. Let me write the plan.
+
+---
+
+# Phased Implementation Plan: Fork Catch-Up to `upstream/main`
+
+## Current State Assessment
+
+- **Fork is at v1.0.9 (versionCode 17)**, upstream is at **v1.0.11 (versionCode 20)**
+- **76 upstream commits** not yet in the fork
+- **Working tree is dirty** — 39 modified/deleted files, in-flight work in progress
+- `LlmHttpService.kt` is **fork-only** (upstream has no `/service/` package at all)
+- The biggest structural change upstream made: a new **`runtime/`** package introducing the `LlmModelHelper` interface and a changed `ResultListener` type signature
+- **`ResultListener` changed** from `(String, Boolean) -> Unit` to `(String, Boolean, String?) -> Unit` — this is the single highest-priority API break for the HTTP service
+
+---
+
+## Phase 0 — Land In-Progress Work (Checkpoint: `pre-sync-baseline`)
+
+**Goal:** Commit the current dirty tree into a clean, buildable state before any upstream adoption begins. Do not proceed to Phase 1 until the GitHub Actions build is green.
+
+### 0.1 — Finish chat history removal
+
+The following files are staged as deleted but may still have dangling references. Audit each call site:
+
+| File to clean | What to remove |
+|---|---|
+| `di/AppModule.kt` | `provideChatHistoryDatabase`, `provideChatHistoryDao`, `provideChatHistoryRepository`, Room DB providers, Room Gradle dep |
+| `ui/navigation/GalleryNavGraph.kt` | `ROUTE_CHAT_HISTORY` composable, `?sessionId=` query param from `ROUTE_MODEL` |
+| `ui/llmchat/LlmChatViewModel.kt` | Remove `LlmChatViewModelBase`, collapse into plain `ChatViewModel` subclass; delete `initializeSession`, `persistMessages`, `getSessionInfo`, `reloadCurrentSessionMessages`, `mapStoredMessage` |
+| `ui/llmchat/LlmChatScreen.kt` | Remove `sessionId` param from `LlmChatScreen`, `LlmAskImageScreen`, `LlmAskAudioScreen`, `ChatViewWrapper`; remove `LaunchedEffect(sessionId)` block |
+| `ui/llmchat/LlmChatTaskModule.kt` | Remove `sessionId` from `LlmChatTask`, `LlmAskImageTask`, `LlmAskAudioTask` |
+| `ui/home/HomeScreen.kt` | Remove history nav button and any `sessionId` navigation calls |
+| `build.gradle.kts` | Remove Room dependencies (`androidx.room:room-runtime`, `room-ktx`, `room-compiler`, KSP if only used for Room) |
+
+**Verify:** `./gradlew assembleDebug` must succeed. Confirm `LlmHttpService` still compiles (it has no Room dependency, but import any removed `ChatHistoryRepository` type will fail the build).
+
+### 0.2 — Commit checkpoint
+
+```
+git add -p   # stage only the history-removal files, not the upstream-integration work
+git commit -m "chore: remove chat history subsystem"
+git tag pre-sync-baseline
+```
+
+---
+
+## Phase 1 — Runtime Package & API Signature Adoption (Checkpoint: `post-runtime-refactor`)
+
+**Goal:** Adopt upstream's new `runtime/` package. This is the highest-risk phase because `LlmHttpService.kt` calls `LlmChatModelHelper.initialize()` and `ResultListener` directly — both of which changed signatures.
+
+### 1.1 — Create the `runtime/` package (new upstream files, no conflicts)
+
+These files exist in upstream but are absent from the fork. Copy them verbatim:
+
+- `runtime/LlmModelHelper.kt` — the `LlmModelHelper` interface
+- `runtime/RuntimeHelper.kt` (or wherever `runtimeHelper` is defined — check `upstream/main:...runtime/` for the full listing)
+- Any other `runtime/*.kt` files upstream added
+
+**Risk:** None — these are additive.
+
+### 1.2 — Update `ResultListener` type alias
+
+In `runtime/LlmModelHelper.kt`, `ResultListener` is now:
+```kotlin
+typealias ResultListener = (partialResult: String, done: Boolean, partialThinkingResult: String?) -> Unit
+```
+
+The old definition (two-arg) was in `LlmChatModelHelper.kt`. The fork's `LlmHttpService.kt` uses this type as a callback. **Action:**
+- Remove the old `typealias ResultListener` and `typealias CleanUpListener` from `LlmChatModelHelper.kt` (upstream already did this)
+- Import them from `runtime/LlmModelHelper.kt` instead
+- In `LlmHttpService.kt`: update every `ResultListener` callback lambda to accept the third `partialThinkingResult: String?` parameter (simply ignore it: `_, _, _ ->` for the HTTP path, or log it in debug mode)
+
+### 1.3 — Update `LlmChatModelHelper.initialize()` signature
+
+Upstream changed the signature in three ways:
+
+| Old (fork) | New (upstream) |
+|---|---|
+| `systemMessage: Message?` | `systemInstruction: Contents?` |
+| `tools: List<Any>` | `tools: List<ToolProvider>` |
+| (absent) | `coroutineScope: CoroutineScope?` |
+| (experimental flag present) | deprecated NPU flag removed |
+
+**Action in `LlmChatModelHelper.kt`:**
+- Make `LlmChatModelHelper` implement `LlmModelHelper`
+- Update the `initialize()` signature to match the interface exactly
+- Adopt the `Contents` type instead of `Message` for `systemInstruction`
+- Remove low-memory detection logic from this file (upstream moved it to the `runtime` package)
+- Remove `SegmentedButtonConfig`-based accelerator check (upstream removed it)
+
+**Action in `LlmHttpService.kt`:**
+- Update the `initialize()` call site: pass `systemInstruction = null`, `tools = listOf()`, `coroutineScope = null` (defaults). This preserves HTTP API behavior exactly.
+- Update the `tools` parameter usage in `/v1/responses` endpoint from `List<Any>` to `List<ToolProvider>`. The `ToolProvider` class comes from `com.google.ai.edge.litertlm.ToolProvider` — it is already a dependency in `build.gradle.kts` since litertlm is there.
+
+### 1.4 — Update `LlmChatViewModel.kt`
+
+Upstream collapsed `LlmChatViewModelBase` (the history-aware class) back into a clean `ChatViewModel` subclass. The fork's Phase 0 did the same manually. Now reconcile:
+- Import `runtimeHelper` from the `runtime` package instead of calling `LlmChatModelHelper` directly (upstream delegates through `runtimeHelper`)
+- Add `ChatMessageThinking` handling to the inference result callback (the third `partialThinkingResult` arg of `ResultListener`)
+- Add thinking-mode config plumbing (already partially done in the fork — verify it matches upstream's approach using the `THINKING_MODE` config key from `Config.kt`)
+
+### 1.5 — Verify and checkpoint
+
+```
+./gradlew assembleDebug        # must pass
+# manual: adb shell curl 127.0.0.1:9006/ping must return {"status":"ok"}
+git commit -m "feat: adopt upstream runtime package and updated API signatures"
+git tag post-runtime-refactor
+```
+
+---
+
+## Phase 2 — Upstream Structural Features (Checkpoint: `post-structural-features`)
+
+**Goal:** Add the new screens and navigation routes that upstream introduced. These are largely additive, but touch `GalleryNavGraph.kt` and `HomeScreen.kt` which are conflict hotspots.
+
+### 2.1 — Dedicated Benchmark Screen
+
+Upstream commit `36c9cd5` added `ui/benchmark/BenchmarkScreen.kt` and a `ROUTE_BENCHMARK` route. The fork currently has `BenchmarkConfigDialog` and inline benchmark in chat.
+
+**Action:**
+- Copy `ui/benchmark/` directory from upstream verbatim (it has no HTTP API intersection)
+- Add `ROUTE_BENCHMARK` constant and composable to `GalleryNavGraph.kt`
+- Upstream also added `benchmarkViewModel` injection — wire it in nav graph
+- Remove benchmark logic from `LlmSingleTurnViewModel.kt` that was inline (upstream moved it)
+
+**Risk:** Medium. `GalleryNavGraph.kt` is a hotspot — the fork removed history routes in Phase 0, so the starting state is already diverged from both the old fork and upstream. Take upstream's nav graph as the canonical version, then re-add only the HTTP service startup/teardown side-effect (if any) that lives in the nav host.
+
+### 2.2 — Global Model Manager Screen
+
+Upstream commit `ae9b5dd` added `ui/modelmanager/GlobalModelManager.kt` and `ROUTE_MODEL_MANAGER`.
+
+**Action:**
+- The fork already has `ui/modelmanager/ModelManagerViewModel.kt`, `ModelList.kt`, `ModelManager.kt`
+- Check upstream for `GlobalModelManager.kt` — copy it verbatim (no fork intersection)
+- Add `ROUTE_MODEL_MANAGER` composable to nav graph (upstream nav graph already shows how it connects)
+- Update `HomeScreen.kt` to add the drawer/model-manager navigation trigger (upstream commit `ae9b5dd` shows the UI entry point)
+
+### 2.3 — System Prompt Editing
+
+Upstream commit `62bcf0e` added initial system prompt editing. This lives in `LlmChatScreen.kt` / `LlmChatViewModel.kt`.
+
+**Action:** File-by-file diff of `LlmChatScreen.kt` against upstream. Accept upstream's system-prompt UI additions. The HTTP service initializes with `systemInstruction = null` and doesn't need to participate in this UI flow.
+
+### 2.4 — Text Input Layout Refactor
+
+Upstream commit `40fe847` and `b968c0c` refactored `MessageInputText.kt` and the empty-state messages in chat UI.
+
+**Action:** Replace `ui/common/chat/MessageInputText.kt` with upstream's version. No HTTP API intersection.
+
+### 2.5 — Update `HomeScreen.kt` holistically
+
+`HomeScreen.kt` is the second-highest conflict file. Steps:
+1. Take upstream version as base
+2. Re-add the HTTP service status indicator (the `LlmHttpService` running/stopped badge that the fork added to the top bar or home screen)
+3. Verify the task display and model list layout still works
+
+### 2.6 — Checkpoint
+
+```
+./gradlew assembleDebug
+# Verify: benchmark screen opens, model manager drawer works, system prompt UI visible
+git commit -m "feat: add benchmark screen, global model manager, system prompt editing"
+git tag post-structural-features
+```
+
+---
+
+## Phase 3 — Chat UI & Message Type Parity (Checkpoint: `post-chat-ui-parity`)
+
+**Goal:** Bring all the chat UI and message type changes from upstream into the fork.
+
+### 3.1 — Audio-only messages (commit `14c3089`)
+
+Upstream added the ability to send a message with only an audio clip (no text). Affects:
+- `ChatPanel.kt` — send button logic
+- `LlmChatViewModel.kt` — `sendMessage()` guard condition
+- `LlmChatScreen.kt` — UI for audio-only send
+- `ChatMessage.kt` — possibly a new `ChatMessageAudioClip`-only path
+
+**Action:** Diff each file against upstream; accept the upstream changes. `LlmHttpService.kt` does not currently support audio input via HTTP (it only handles `prompt` text and image). No change needed in the service — just accept upstream's UI changes.
+
+### 3.2 — Thinking mode in chat panel (commit `9a5e193`)
+
+Upstream added `ChatMessageThinking` and a collapsible thinking section.
+
+**Fork status:** `MessageBodyThinking.kt` was already added to the fork (it appears in `git status` as a new untracked file). **Action:**
+- Compare `MessageBodyThinking.kt` in fork vs upstream — ensure they match
+- Verify `ChatPanel.kt` has the `ChatMessageThinking` rendering block (upstream added it in `9a5e193`)
+- Verify `ChatViewModel.kt` base handles thinking messages correctly
+
+### 3.3 — Selective text copying (commit `3a790cf`)
+
+Upstream added long-press text selection in chat messages. Touches `MessageBodyText.kt` and possibly `ChatPanel.kt`.
+
+**Action:** Take upstream's `MessageBodyText.kt`. Low risk, no HTTP intersection.
+
+### 3.4 — Config dialog improvements (commits `bfd6a63`, `b24ed29`)
+
+- Min-value display on slider
+- Warning for high max-tokens setting
+- These partially done in fork (`ConfigDialog.kt` is already modified)
+
+**Action:** Diff fork's `ConfigDialog.kt` against upstream. Reconcile manually — keep fork's version as base, apply any missing upstream changes. Key things to verify: the `minValue` label rendering and the warning threshold logic.
+
+### 3.5 — `ToolProvider` migration (commit `fd8ec20`)
+
+The `tools: List<Any>` in several places (not just `initialize()`) was migrated to `List<ToolProvider>`.
+
+**Action:** Search across all files for remaining `List<Any>` usages that were holding tools. Update to `List<ToolProvider>`. Also update `LlmHttpService.kt`'s tool-call synthesis section — the `ToolProvider` class will need to be constructed instead of arbitrary `Any` objects. This is the second-most-critical `LlmHttpService.kt` fix after the `ResultListener` change.
+
+### 3.6 — Empty state screen updates (commit `5aa412a`)
+
+New empty-state illustrations/text in various screens.
+
+**Action:** Take upstream's changes verbatim (pure UI, no HTTP intersection).
+
+### 3.7 — Checkpoint
+
+```
+./gradlew assembleDebug
+# Verify: audio messages, thinking display, text selection, config dialog warnings
+git commit -m "feat: chat UI parity - thinking mode, audio-only, text copy, config improvements"
+git tag post-chat-ui-parity
+```
+
+---
+
+## Phase 4 — Build Config, Dependencies, & Model Allowlist (Checkpoint: `post-deps-bump`)
+
+**Goal:** Align build config and model allowlist with upstream v1.0.11.
+
+### 4.1 — Bump `build.gradle.kts`
+
+| Field | Fork | Upstream |
+|---|---|---|
+| `versionCode` | 17 | 20 |
+| `versionName` | `"1.0.9"` | `"1.0.11"` |
+| litertlm | (current) | bumped to `0.9.0-alpha05` (commit `cd0ae45`) |
+| Firebase/FCM | absent | added (commit `c513cbd`) |
+| NPU experimental flag | present | removed (commit `515f322`) |
+
+**Action on litertlm bump:** This is the highest-risk dependency change. The `LlmChatModelHelper.kt` API surface uses `Engine`, `Conversation`, `ConversationConfig`, `Content`, `Contents`, `Message`, `SamplerConfig` — verify all of these still exist in `0.9.0-alpha05`. The sealed class refactor in commit `eaf1d6c` (`[litertlm] Update LiteRT-LM Kotlin Backend API to a sealed class`) is the most likely source of breakage. Check the litertlm changelog or diff that specific upstream commit.
+
+**Action on FCM:** Upstream added Firebase Cloud Messaging in commit `c513cbd` and push notification permission in `da5d083`. The fork does not need FCM — skip `FirebaseMessagingService` registration. However, the Firebase dependency may be pulled in by other Firebase modules already present. If `google-services.json` is absent, the FCM service will fail at runtime. **Recommended:** add the FCM service class but leave it as a no-op stub that doesn't register, avoiding a build failure if `google-services.json` is present in upstream but not the fork.
+
+**Action on NPU:** Remove the `@ExperimentalFlags` annotation usage deprecated by upstream, accept upstream's `Accelerator`/backend enum changes.
+
+### 4.2 — `libs.versions.toml` update
+
+Upstream will have bumped multiple version catalog entries. Compare fork's `libs.versions.toml` against upstream's. Apply all upstream version bumps **except** any that would conflict with `nanohttpd:2.3.1` (NanoHTTPD is fork-only, no upstream conflict expected). Check for Kotlin version bump that could affect `context receivers` experimental flag.
+
+### 4.3 — Model allowlist updates
+
+Upstream commits `79431c6`, `18af880`, `35f75f8`, `1bf07d6` updated the allowlist. The fork's `ModelAllowlist.kt` and `model_allowlist.json` may be behind.
+
+**Action:** 
+- Take upstream's `model_allowlist.json` as-is (it's data, not logic)
+- In `ModelAllowlist.kt`, verify the `AllowedModel` data class still matches the JSON schema (upstream may have added new fields like `npuModel` from commit `fa113a0`)
+
+### 4.4 — Checkpoint
+
+```
+./gradlew assembleDebug
+# Check build variants (debug + release) both pass
+# Run LlmHttpService smoke test: /ping, /v1/models, basic /generate
+git commit -m "chore: bump to v1.0.11, update litertlm, allowlist, and deps"
+git tag post-deps-bump
+```
+
+---
+
+## Phase 5 — HTTP API Hardening (Checkpoint: `post-http-hardened`)
+
+**Goal:** Verify and harden `LlmHttpService.kt` against all changes made in previous phases.
+
+### 5.1 — `LlmHttpService` ↔ `LlmChatModelHelper` contract audit
+
+After all the upstream changes, re-read `LlmHttpService.kt` end-to-end. For each call into `LlmChatModelHelper`, verify:
+
+| Call site in `LlmHttpService` | Verify |
+|---|---|
+| `LlmChatModelHelper.initialize(...)` | New signature accepted: `systemInstruction = null`, `tools = listOf()`, `coroutineScope = null` |
+| `ResultListener` callback lambda | Third arg `partialThinkingResult: String?` silently ignored (HTTP path doesn't stream thinking tokens) |
+| `runInference(model, prompt, resultListener, ...)` | Check if `runInference` signature also changed (check for `Contents` vs `String` input) |
+| `resetConversation(model)` | Verify still exists and signature unchanged |
+| `cleanUp(model)` | Verify still exists |
+| `pickDefaultLlmModel()` | Uses `ModelAllowlist` — verify after allowlist schema changes |
+
+### 5.2 — `ToolProvider` in HTTP service
+
+The `/v1/responses` endpoint constructs tool definitions for function-calling. After the `List<Any>` → `List<ToolProvider>` migration, the tool construction code in `LlmHttpService.kt` must use `ToolProvider` objects. Review the `ToolProvider` class constructor in `com.google.ai.edge.litertlm.ToolProvider` and update the JSON-to-tool mapping accordingly.
+
+### 5.3 — Foreground service type for Android 14+
+
+Upstream added FCM which requires notification permission. This may have changed `AndroidManifest.xml` in ways that interact with the fork's `FOREGROUND_SERVICE_SPECIAL_USE` or `FOREGROUND_SERVICE_DATA_SYNC` declaration for `LlmHttpService`. Audit `AndroidManifest.xml` diff and ensure the service type is still correctly declared.
+
+### 5.4 — `LlmHttpPrefs` migration consideration
+
+Currently uses `SharedPreferences`. Upstream has migrated most settings to `DataStore<Settings>`. The fork could leave `LlmHttpPrefs` on `SharedPreferences` indefinitely (it's isolated to the HTTP path), but if upstream's `DataStoreRepository` shape changed significantly, verify `AppModule.kt`'s DI wiring still provides `LlmHttpPrefs`'s implicit `Context` dependency.
+
+### 5.5 — End-to-end HTTP smoke test
+
+Via `adb reverse tcp:9006 tcp:9006` on a connected device:
+
+```bash
+curl http://127.0.0.1:9006/ping
+# → {"status":"ok"}
+
+curl -X POST http://127.0.0.1:9006/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Hello"}'
+# → streaming text or JSON response
+
+curl http://127.0.0.1:9006/v1/models
+# → model list
+```
+
+### 5.6 — Checkpoint
+
+```
+git commit -m "fix: harden LlmHttpService against upstream API changes"
+git tag post-http-hardened
+```
+
+---
+
+## Phase 6 — Final Cleanup & Version Bump (Checkpoint: `upstream-parity-v1.0.11`)
+
+### 6.1 — Remaining "internal changes" commits
+
+The 76 upstream commits include many labeled "Internal changes" or "internal changes" that are opaque. Strategy:
+- For each, run `git show <sha> --stat` to see which files changed
+- If only non-conflict files (resources, strings, internal plumbing): `git show <sha> | git apply --3way` selectively
+- If touching a hotspot file: manual diff and adopt
+
+**Key "internal" commits to check individually:**
+- `68715fc`, `77f0bc9`, `e9ea352` (most recent three — likely small polish)
+- `74641f7`, `07fb05f` (sandwiched around config dialog changes)
+- `8a9b2ab`, `0060a4e`, `ee7af4e`, `dbaef93` (around thinking/config plumbing)
+
+### 6.2 — `strings.xml` and resource sync
+
+Upstream will have added strings for benchmark, system prompt, model manager, audio strings update (`09eb1e5`). Take upstream's `strings.xml` as base, add back the fork's HTTP-service-related strings (`http_service_enabled`, port strings, etc.).
+
+### 6.3 — `AGENTS.md` and `README.md`
+
+Update `AGENTS.md` to reflect the new phase structure. The `README.md` already diverges (fork adds HTTP API documentation). Keep fork's additions, update the upstream feature list to match v1.0.11.
+
+### 6.4 — Final tag
+
+```
+git commit -m "chore: reach parity with upstream v1.0.11"
+git tag upstream-parity-v1.0.11
+```
+
+---
+
+## Conflict Hotspot Map
+
+| File | Conflict Level | Nature of Conflict |
+|---|---|---|
+| `ui/llmchat/LlmChatModelHelper.kt` | **CRITICAL** | `LlmModelHelper` interface adoption, `ResultListener` sig change, removed low-mem logic |
+| `service/LlmHttpService.kt` | **CRITICAL** | Fork-only file; must adapt to every upstream API change without upstream help |
+| `ui/llmchat/LlmChatViewModel.kt` | **HIGH** | History removal (Phase 0) + thinking mode + `runtimeHelper` adoption |
+| `ui/navigation/GalleryNavGraph.kt` | **HIGH** | New routes (benchmark, model manager), removed history route, nav graph grew from ~120 to 553 lines |
+| `build.gradle.kts` | **HIGH** | litertlm sealed class refactor, FCM addition, NPU flag removal |
+| `di/AppModule.kt` | **MEDIUM** | History DI removal, possibly DataStore shape changes |
+| `ui/home/HomeScreen.kt` | **MEDIUM** | Layout refactor, drawer trigger, HTTP status badge re-insertion |
+| `ui/common/chat/ChatPanel.kt` | **MEDIUM** | Thinking collapsible, audio-only send, text input re-layout |
+| `ui/common/ConfigDialog.kt` | **MEDIUM** | Slider min-value display, max-token warning |
+| `data/ModelAllowlist.kt` | **LOW** | New `npuModel` field, schema additions |
+| `ui/common/chat/ChatMessage.kt` | **LOW** | `ChatMessageThinking` (partially added), `ChatMessageAudioClip` audio-only path |
+| `data/Config.kt` | **LOW** | Thinking mode config key additions (partially done) |
+| `res/values/strings.xml` | **LOW** | Additive string changes |
+
+---
+
+## Sync Strategy
+
+**Do NOT attempt `git merge upstream/main`** from the current dirty state. The tree has 39 modified/deleted files, the history diverged significantly, and a merge would produce hundreds of conflicts across files that are being simultaneously modified in-flight.
+
+**Recommended approach: file-by-file, phase-by-phase adoption:**
+
+1. **For fork-only files** (`LlmHttpService.kt`, `LlmHttpPrefs.kt`): never merge from upstream (they don't exist there). Update manually in response to upstream API changes.
+
+2. **For purely upstream files with no fork changes** (new `runtime/` package, `ui/benchmark/`, `GlobalModelManager.kt`, new `ui/common/chat/Message*.kt` files): use `git show upstream/main:<path> > <local-path>` to copy verbatim.
+
+3. **For hotspot files** (nav graph, `LlmChatViewModel`, `ChatPanel`, home screen): use `git diff HEAD upstream/main -- <file>` to understand the full delta, then apply changes manually to the fork version, resolving conflicts by hand.
+
+4. **For `build.gradle.kts` and `libs.versions.toml`**: use upstream as base, re-add NanoHTTPD dependency block.
+
+5. **Cherry-pick** is appropriate for isolated, low-risk upstream commits (allowlist updates, string additions, `bfd6a63` config dialog) where the file has no fork changes.
+
+---
+
+## GitHub Actions CI Strategy
+
+The existing `.github/workflows/android-apk.yml` is the primary validation gate. Current config:
+- Triggers on `Android/src/**` and `model_allowlist.json` changes
+- Builds debug APK only
+- Groups by branch (cancels stale runs)
+
+**Recommended additions:**
+
+1. **Add a `lint` step** before `assembleDebug`: `./gradlew lint`. This catches import errors and type mismatches that compile warnings would miss.
+
+2. **Add `assembleRelease` step** (without signing) to catch ProGuard/R8 issues that debug builds miss, especially after the litertlm API refactor.
+
+3. **Create a protected `upstream-sync` branch** with a required CI check — use this as the staging area for each phase. Only merge to `main` once CI is green on `upstream-sync`. This enforces the checkpoint discipline.
+
+4. **Add artifact upload** for both debug and release APKs (already done for debug — extend it):
+   ```yaml
+   - name: Upload Release APK
+     uses: actions/upload-artifact@v4
+     with:
+       name: gallery-release-unsigned
+       path: Android/src/app/build/outputs/apk/release/*.apk
+   ```
+
+5. **Phase gate commits**: each checkpoint tag (`pre-sync-baseline`, `post-runtime-refactor`, etc.) should be pushed to the remote so they survive as rollback points. Add to the workflow:
+   ```yaml
+   on:
+     push:
+       tags: ['pre-*', 'post-*', 'upstream-parity-*']
+   ```
+
+---
+
+## Risk Register
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| `litertlm 0.9.0-alpha05` breaks `Engine`/`Conversation` API | HIGH | Before adopting, run `git show cd0ae45 --stat` to see which files changed; check for any `@Deprecated` removals |
+| `ResultListener` third arg causes silent wrong behavior in HTTP path | HIGH | In `LlmHttpService`, explicitly name the third param `partialThinkingResult` and assert it's ignored with a comment |
+| FCM `google-services.json` absent causes build failure | MEDIUM | Guard FCM service registration with `if (BuildConfig.DEBUG)` or exclude from fork's manifest |
+| `sealed class` refactor in litertlm (`eaf1d6c`) breaks `when` expressions | MEDIUM | After dep bump, search for exhaustive `when(backend)` blocks and add the new sealed subclass cases |
+| NPU model support (`fa113a0`) adds new `AllowedModel` fields that break JSON parsing | LOW | Add `@JsonIgnoreProperties(ignoreUnknown = true)` or verify the Gson/Moshi parsing is already lenient |
+| Firebase analytics calls in nav graph (`firebaseAnalytics?.logEvent`) fail without `google-services.json` | LOW | Already null-safe (`?.`) in upstream — safe to leave as-is |
+
+---
+
+## Recommended Execution Order Summary
+
+```
+Phase 0  → land dirty tree, remove chat history          → tag: pre-sync-baseline
+Phase 1  → runtime package + API signature fixes          → tag: post-runtime-refactor
+Phase 2  → benchmark screen + model manager + nav routes  → tag: post-structural-features
+Phase 3  → chat UI message type parity                    → tag: post-chat-ui-parity
+Phase 4  → deps bump + allowlist + build config           → tag: post-deps-bump
+Phase 5  → LlmHttpService hardening + smoke test          → tag: post-http-hardened
+Phase 6  → final cleanup + strings + docs                 → tag: upstream-parity-v1.0.11
+```
+
+Each phase boundary: CI must be green before moving forward. The `post-runtime-refactor` tag is the most important rollback point — if Phase 4's litertlm bump breaks the runtime contract, you need a clean base to return to.

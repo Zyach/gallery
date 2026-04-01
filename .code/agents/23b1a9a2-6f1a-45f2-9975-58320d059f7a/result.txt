@@ -1,0 +1,237 @@
+Now I have a thorough understanding of the codebase. Let me compose the plan.
+
+---
+
+# Implementation Plan: Upstream Integration & Chat History Removal
+
+## Current State Summary
+
+| Dimension | Detail |
+|-----------|--------|
+| **Fork ahead** | ~40 commits (HTTP API, chat history, HF static tokens, settings UI, model allowlist changes) |
+| **Upstream ahead** | ~76 commits (thinking mode, system prompts, global model manager, benchmark UI, KSP migration, Kotlin 2.2, Compose BOM 2026.02) |
+| **Total divergence** | 135 files changed, 116 independent commits |
+| **Build gap** | Fork: Kotlin 2.1 / kapt / Compose BOM 2025.11; Upstream: Kotlin 2.2 / KSP / Compose BOM 2026.02 |
+
+---
+
+## Phase 0 — Prep & Checkpoint (before any merging)
+
+**Goal:** Clean working tree, create safety branches, verify builds.
+
+### Steps
+1. **Commit or stash dirty working tree.** Current `git status` shows 8 modified files + untracked dirs. Create a `pre-sync-checkpoint` branch/tag from current HEAD.
+2. **Fetch upstream:** `git fetch upstream --tags`
+3. **Verify baseline build:** `./gradlew :app:assembleDebug` from `Android/src/` must succeed. If not, fix first — never start a merge from a broken state.
+4. **Document fork-only files** in a manifest (for quick reference during conflict resolution):
+   - `service/LlmHttpService.kt` — **keep**
+   - `data/LlmHttpPrefs.kt` — **keep** (minus history toggle)
+   - `data/chathistory/*` (7 files) — **remove**
+   - `ui/history/*` (2 files) — **remove**
+   - `ui/home/SettingsDialog.kt` — **keep**, edit to remove history toggle
+   - `di/AppModule.kt` — **edit** to remove chat history DI
+   - Chat history wiring in `LlmChatViewModel.kt` — **revert to upstream shape**
+
+### Rollback: Tag `pre-sync-checkpoint` lets you `git reset --hard` back.
+
+---
+
+## Phase 1 — Remove Chat History Subsystem
+
+**Rationale:** Do this *before* merging upstream to reduce the conflict surface. The chat history subsystem touches `LlmChatViewModel.kt`, `AppModule.kt`, `GalleryNavGraph.kt`, and `HomeScreen.kt` — all of which upstream has also changed. Removing it first simplifies every subsequent merge.
+
+### 1.1 Delete dedicated chat history files
+```
+DELETE: data/chathistory/ChatHistoryRepository.kt
+DELETE: data/chathistory/ChatHistoryDao.kt
+DELETE: data/chathistory/ChatHistoryDatabase.kt
+DELETE: data/chathistory/ChatHistoryEntities.kt
+DELETE: data/chathistory/ChatAttachmentStorage.kt
+DELETE: data/chathistory/ChatCryptoManager.kt
+DELETE: data/chathistory/ChatHistoryKeyManager.kt
+DELETE: data/chathistory/ChatHistoryExport.kt
+DELETE: ui/history/ChatHistoryScreen.kt
+DELETE: ui/history/ChatHistoryViewModel.kt
+```
+
+### 1.2 Unwire from DI (`di/AppModule.kt`)
+- Remove all `@Provides` / `@Singleton` for: `ChatCryptoManager`, `ChatHistoryKeyManager`, `ChatHistoryDatabase`, `ChatHistoryDao`, `ChatHistoryRepository`, `ChatAttachmentStorage`.
+- Remove Room and SQLCipher imports.
+
+### 1.3 Rewrite `LlmChatViewModel.kt` (HIGH RISK — most complex edit)
+- **Remove** the entire `LlmChatViewModelBase` class (lines 62-175) which wraps `ChatHistoryRepository`.
+- **Remove** `ChatHistoryRepository` constructor injection from `LlmChatViewModel`, `LlmAskImageViewModel`, `LlmAskAudioViewModel`.
+- Flatten remaining logic (`generateResponse`, `stopResponse`, `resetSession`, `runAgain`, `handleError`) directly into `LlmChatViewModel` extending `ChatViewModel()`.
+- Remove all calls to `initializeSession()`, `persistMessages()`, `getMessagesWithAttachmentsOnce()`, `getCurrentSessionId()`.
+- Key concern: `LlmHttpService.kt` does **not** depend on `ChatHistoryRepository` — it drives inference via `LlmChatModelHelper` directly, so no HTTP API impact.
+
+### 1.4 Clean navigation (`GalleryNavGraph.kt`)
+- Remove `ROUTE_CHAT_HISTORY` composable and associated route.
+- Remove `sessionId` parameter from model page route if it was added only for history.
+- Remove `navigateToSession` callback plumbing.
+
+### 1.5 Clean home screen (`HomeScreen.kt`)
+- Remove `navigateToChatHistory` callback parameter.
+- Remove `AppBarActionType.CHAT_HISTORY` from top bar actions.
+
+### 1.6 Clean settings (`SettingsDialog.kt` / `LlmHttpPrefs.kt`)
+- Remove "Guardar historial de chat" toggle from Settings UI.
+- Remove `KEY_HISTORY_ENABLED` / `isHistoryEnabled()` from `LlmHttpPrefs.kt`.
+
+### 1.7 Remove build dependencies (`build.gradle.kts`)
+- Remove: `androidx.room:room-*`, `net.zetetic:android-database-sqlcipher`, `androidx.sqlite:sqlite-framework`, `androidx.paging:paging-*`.
+- Remove Room KSP/kapt annotation processor.
+- Remove Room schema export config if present.
+
+### Verification
+- `./gradlew :app:assembleDebug` — must compile.
+- Manual test: open app → navigate to LLM chat → send message → verify response streams. Confirm no crashes or DB-related errors in logcat.
+- Verify HTTP API: start service from Settings → `curl http://127.0.0.1:9006/ping` → `{"status":"ok"}`.
+- **Commit** as `remove-chat-history-subsystem`.
+
+---
+
+## Phase 2 — Upstream Merge (Feature Integration)
+
+**Goal:** Bring in upstream's 76 commits. This is the highest-risk phase.
+
+### 2.1 Strategy choice: **Merge, not rebase**
+
+Rebase of 40 fork commits onto 76 upstream commits would require resolving conflicts commit-by-commit (potentially 40+ conflict rounds). A merge commit is one conflict resolution pass.
+
+```
+git checkout main
+git merge upstream/main --no-commit   # pause to inspect
+```
+
+### 2.2 Expected conflict zones (by file, with resolution strategy)
+
+| File | Conflict Source | Resolution |
+|------|----------------|------------|
+| `build.gradle.kts` | Kotlin 2.1→2.2, kapt→KSP, dependency versions | **Take upstream** versions but re-add: `nanohttpd:2.3.1`, `kotlinx-serialization-json`. Drop Room/SQLCipher (already removed). |
+| `gradle.properties` / `libs.versions.toml` | Version catalog | Take upstream, add fork-only deps. |
+| `AndroidManifest.xml` | Service declaration | Take upstream, re-add `<service android:name=".service.LlmHttpService" .../>` block. |
+| `data/Model.kt` | Model data class fields | Upstream likely added fields. Take upstream, preserve any fork additions (e.g., `llmSupportImage/Audio` if divergent). |
+| `data/Config.kt` | Config keys | Take upstream additions, preserve fork-only keys. |
+| `data/Tasks.kt` | Task definitions | Take upstream (includes Tiny Garden etc.), preserve fork's model/task adjustments. |
+| `data/ModelAllowlist.kt` | Model list / parsing | **Manual merge** — fork uses LiteRT-LM variants with different URLs/sizes. Preserve fork model list but adopt any structural changes from upstream. |
+| `ui/llmchat/LlmChatViewModel.kt` | Upstream changed this significantly (thinking mode, system prompts) | **Take upstream** as base, since we already removed chat history wiring in Phase 1. Fork's `generateResponse` logic is close to upstream — diff carefully for inference pipeline changes. |
+| `ui/llmchat/LlmChatScreen.kt` | UI layout changes | Take upstream — adds thinking mode, system prompt UI, text selection. |
+| `ui/home/HomeScreen.kt` | Global model manager, drawer menu | Take upstream — we already removed history callback. |
+| `ui/navigation/GalleryNavGraph.kt` | Route changes | Take upstream — we already removed history route. |
+| `ui/common/chat/ChatViewModel.kt` | Base class changes | Take upstream. |
+| `ui/modelmanager/ModelManagerViewModel.kt` | Model management changes | Careful merge — fork has import dialog changes. |
+| `MainActivity.kt` | Service startup | Take upstream, re-add HTTP service auto-start block. |
+
+### 2.3 Files that should NOT conflict (fork-only, no upstream counterpart)
+- `service/LlmHttpService.kt` — purely additive
+- `data/LlmHttpPrefs.kt` — purely additive
+- `ui/home/SettingsDialog.kt` — purely additive (if upstream didn't add one)
+- `customtasks/tinygarden/*` — already re-synced
+
+### 2.4 Build system migration: kapt → KSP
+Upstream uses KSP. Since we removed Room (the main kapt consumer), this migration is straightforward:
+- Adopt upstream's `build.gradle.kts` KSP plugin config.
+- Hilt works with KSP — upstream already has this.
+- Verify `@HiltViewModel` annotations still process correctly.
+
+### 2.5 Kotlin 2.1 → 2.2 migration
+- Upstream already handles this. Take their `kotlin` plugin version.
+- Watch for: compose compiler compatibility, new deprecation warnings.
+
+### Verification
+- `./gradlew :app:assembleDebug` — resolve any remaining compile errors iteratively.
+- Full manual test pass:
+  - LLM chat (text, image, audio if supported)
+  - HTTP API (`/ping`, `/generate`, `/v1/chat/completions`, `/v1/responses`)
+  - Tiny Garden
+  - Model download from HuggingFace
+  - Settings dialog (HTTP toggle, port config)
+  - New upstream features: thinking mode toggle, system prompt editing, benchmark screen
+- **Commit** as `merge-upstream-main`.
+
+---
+
+## Phase 3 — Harden the HTTP API Path
+
+**Goal:** Ensure `LlmHttpService` works cleanly with upstream's updated inference pipeline.
+
+### 3.1 Adapt to upstream API changes
+- **`List<Any>` → `List<ToolProvider>` migration**: Upstream changed tool types. Update `LlmHttpService.kt`'s tool-calling code to use `ToolProvider` instead of raw `Any`.
+- **LiteRT-LM version bump**: Upstream moved to `0.9.0-alpha05+`. Update `LlmHttpService` for any API changes in `LlmChatModelHelper` or `LlmModelInstance`.
+- **Thinking mode support**: If upstream's inference now returns thinking tokens, decide whether to expose them in HTTP responses (recommend: include as a `thinking` field in response JSON when present).
+
+### 3.2 Reconcile model discovery
+- `LlmHttpService` currently reads `model_allowlist.json` independently. Upstream may have changed the allowlist format or model metadata structure. Verify `AllowedModel` parsing still works.
+- Consider: should the HTTP service use the same model registry as the UI? Currently they're somewhat independent — this is fragile.
+
+### 3.3 Add missing HTTP API features from upstream capabilities
+- **System prompt**: Add optional `system_prompt` field to `/v1/chat/completions` request schema.
+- **Streaming for chat completions**: Currently only `/v1/responses` supports SSE. Consider adding SSE to `/v1/chat/completions` for OpenAI API compatibility.
+
+### Verification
+- Automated: Write a shell script that starts the service and hits each endpoint with `curl`.
+- Manual: Use Every Code to verify end-to-end integration.
+- **Commit** as `harden-http-api`.
+
+---
+
+## Phase 4 — Cleanup & Documentation
+
+### 4.1 Update `README.md`
+- Remove chat history from "Changes made in this fork" section.
+- Document current HTTP API endpoints and usage.
+
+### 4.2 Update `AGENTS.md` if present
+- Reflect current architecture.
+
+### 4.3 Remove stale model allowlist JSON versions
+- Files like `model_allowlist_1.0.4.json` through `1.0.9.json` — keep only the current one unless they serve a rollback purpose.
+
+### 4.4 Update version
+- Bump `versionCode` and `versionName` to reflect the merge.
+
+---
+
+## Phase 5 — Ongoing Sync Strategy
+
+### Recommended workflow to reduce future drift:
+
+1. **Track upstream as a named remote** (already done: `upstream`).
+2. **Merge upstream regularly** — at least once per upstream release tag. Don't let >20 commits accumulate.
+3. **Isolate fork-only code** in clearly separated files/packages:
+   - `service/` package for HTTP API — already good.
+   - `data/LlmHttpPrefs.kt` — already isolated.
+   - `ui/home/SettingsDialog.kt` — consider moving to `ui/settings/` to avoid conflicts with upstream home screen changes.
+4. **Minimize edits to upstream files.** When you must modify an upstream file (e.g., `MainActivity.kt` for service startup), keep the change as small as possible — ideally a single block guarded by a clear comment like `// [FORK: HTTP API]`.
+5. **Use feature flags** in `LlmHttpPrefs` for fork-only behavior so the fork can carry upstream code unchanged and only diverge at runtime.
+6. **Tag each successful merge** with the upstream commit hash: `git tag fork-synced-at-<upstream-short-hash>`.
+
+---
+
+## Risk Summary
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| `LlmChatViewModel.kt` merge conflict | **High** | Phase 1 removes chat history first, reducing diff surface. Take upstream as base. |
+| Build system kapt→KSP break | **Medium** | Room removed (main kapt user). Hilt KSP already upstream. Test incrementally. |
+| LiteRT-LM API breaking changes (0.9.0-alpha01 → later) | **Medium** | Check upstream release notes. `LlmHttpService` calls `LlmChatModelHelper` which abstracts most of this. |
+| Model allowlist format divergence | **Medium** | Fork uses custom model names/URLs. Manual merge required — no shortcut. |
+| `ModelAllowlist.kt` parsing incompatibility | **Low-Medium** | Upstream may have restructured JSON schema. Verify `AllowedModel` data class matches. |
+| Compose BOM jump (2025.11 → 2026.02) | **Low** | Usually backward compatible. Watch for deprecated API removals. |
+| HTTP service broken after merge | **Low** | Service is self-contained. Quick to test with `curl`. |
+
+---
+
+## Execution Order & Time Estimates
+
+| Phase | Dependencies | Estimated Effort |
+|-------|-------------|-----------------|
+| Phase 0 — Prep | None | Small |
+| Phase 1 — Remove chat history | Phase 0 | Medium (many files, but straightforward deletions) |
+| Phase 2 — Upstream merge | Phase 1 | Large (main effort, expect conflict resolution) |
+| Phase 3 — Harden HTTP API | Phase 2 | Medium |
+| Phase 4 — Cleanup | Phase 3 | Small |
+| Phase 5 — Ongoing | Phase 4 | Process change, not code |
+
+Each phase ends with a commit and verified build — you can stop and resume at any phase boundary.

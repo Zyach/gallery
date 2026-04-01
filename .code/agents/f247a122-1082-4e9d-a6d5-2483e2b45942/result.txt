@@ -1,0 +1,333 @@
+Since you're running in read-only mode, I'll present the comprehensive plan directly below. This is a detailed, phased implementation strategy for syncing the fork with upstream while preserving the HTTP API.
+
+---
+
+# **Upstream Sync Plan: google-ai-edge/gallery Fork Integration**
+
+## **Executive Summary**
+
+**Objective:** Bring fork to parity with `upstream/main` (v1.0.11) while preserving the local loopback HTTP API (127.0.0.1).
+
+**Current State:**
+- Fork: commit `2d32dbf` with partial thinking mode integration
+- Upstream: ~50 commits ahead, includes benchmarks, FCM, TinyGarden, thinking mode, proto buffers
+- Critical constraint: HTTP API (LlmHttpService, LlmHttpPrefs) is non-negotiable
+
+**Key Finding:** Upstream **explicitly deleted** `LlmHttpService.kt` and `LlmHttpPrefs.kt` (they don't exist in upstream), meaning the HTTP API is a pure fork addition that must be preserved across all integration phases.
+
+**Estimated Effort:** 15–22 hours of focused work across 7 phases over 3 days.
+
+---
+
+## **Phase 1: Stabilize Current Work & Commit Chat History Removal** (2–3 hrs)
+
+**Goal:** Clean up in-progress chat history removal and verify thinking mode integration.
+
+### Key Tasks:
+1. **Commit chat history deletion:**
+   - Delete all files in `data/chathistory/` and `ui/history/`
+   - Remove `ModelSelector.kt` from `ui/common/chat/`
+   - Clean DI (`AppModule.kt`): remove Chat History providers
+   - Clean navigation (`GalleryNavGraph.kt`): remove `ROUTE_CHAT_HISTORY`, `sessionId` params
+   - Clean task modules: remove `sessionId` plumbing from `LlmChatScreen`, `LlmChatTaskModule`
+
+2. **Verify thinking mode integration:**
+   - Confirm `ChatMessageThinking` import in `LlmChatViewModel`
+   - Verify `Config.kt` has `SUPPORT_THINKING` and `ENABLE_THINKING` keys
+   - Verify `Model.kt` reads `llmSupportThinking` from allowlist
+   - Verify `ChatPanel.kt` renders thinking blocks
+
+3. **Build & test:**
+   ```bash
+   ./gradlew assembleDebug
+   # Success: APK builds, HTTP API functional on 127.0.0.1:9006
+   ```
+
+4. **Commit:** `chore: remove chat history subsystem and finalize thinking mode integration`  
+   **Tag:** `phase-1-chat-history-removal`
+
+---
+
+## **Phase 2: Integrate New Upstream Architecture & Core Features** (4–6 hrs)
+
+**Goal:** Add upstream's major new features (FCM, benchmarks, proto serializers, UI components) without touching HTTP API.
+
+### Key Tasks:
+
+1. **Proto buffers & serializers:**
+   - Copy `BenchmarkResultsSerializer.kt`, `CutoutsSerializer.kt` from upstream
+   - These support DataStore serialization (no HTTP conflict)
+
+2. **Firebase Cloud Messaging:**
+   - Copy `FcmMessagingService.kt` from upstream
+   - Ensure `firebase.messaging` is in `libs.versions.toml`
+   - Register in `AndroidManifest.xml`
+   - Purely opt-in; no HTTP API conflict
+
+3. **Benchmark feature:**
+   - Copy entire `ui/benchmark/` package:
+     - `BenchmarkScreen.kt`, `BenchmarkViewModel.kt`
+     - `BenchmarkModelPicker.kt`, `BenchmarkResultsViewer.kt`, `BenchmarkValueSeriesViewer.kt`
+   - Copy `runtime/LlmModelHelper.kt` (compare against `LlmChatModelHelper.kt` for overlap; if significant, discuss inheritance pattern)
+   - Add benchmark routes to `GalleryNavGraph.kt`
+   - **Decision point:** If `LlmModelHelper` is generic base and `LlmChatModelHelper` specializes it, refactor to inheritance. Otherwise, keep separate.
+
+4. **UI improvements:**
+   - Copy new components: `Accordions.kt`, `EmptyState.kt`, other utility components
+   - Compare fork's `ConfigDialog.kt` with upstream (should be similar post-thinking integration)
+
+5. **Dependencies & build.gradle.kts:**
+   - **Remove (if fork still has):** Room, SQLCipher, Paging, ~~NanoHTTPD~~
+   - **Keep (fork must have):** `implementation("org.nanohttpd:nanohttpd:2.3.1")`
+   - **Add:** `firebase.messaging`, `ksp(libs.moshi.kotlin.codegen)` if not present
+   - Update `versionCode = 20`, `versionName = "1.0.11"`
+   - Remove `buildConfigField("String", "PERF_PROFILE", ...)`
+
+6. **libs.versions.toml:**
+   - Merge upstream's dependency versions
+   - Especially check: LiteRT, MediaPipe, Protobuf (ensure compatibility)
+   - Test: `./gradlew dependencies --configuration=implementation`
+
+7. **Resources:**
+   - Accept upstream's `strings.xml` (heavily refactored for benchmarks)
+   - Preserve fork HTTP API strings if any (re-add if removed)
+   - Accept new drawables (e.g., `twirl.xml`)
+
+8. **Model allowlist:**
+   - Accept `model_allowlist.json` and version-specific lists from upstream
+   - Preserve any fork-specific `localModelFilePathOverride` entries
+
+9. **Build & test:**
+   ```bash
+   ./gradlew clean assembleDebug
+   # Success: Builds, APK reasonable size (~150–200 MB debug)
+   ```
+
+10. **Commit:** `feat: integrate upstream core features (FCM, benchmarks, UI improvements)`  
+    **Tag:** `phase-2-core-features`
+
+---
+
+## **Phase 3: Preserve & Verify HTTP API** (2–3 hrs) ⚠️ **CRITICAL**
+
+**Goal:** Ensure loopback HTTP API remains functional and integrated post-merge.
+
+### Key Tasks:
+
+1. **Verify presence:**
+   - `Android/src/app/src/main/java/com/google/ai/edge/gallery/service/LlmHttpService.kt` exists
+   - `Android/src/app/src/main/java/com/google/ai/edge/gallery/data/LlmHttpPrefs.kt` exists
+   - If missing, restore from working tree immediately
+
+2. **Verify app layer integration:**
+   - `MainActivity.kt` / `GalleryApplication.kt`: HTTP service startup code present
+   - `HomeScreen.kt` / `SettingsDialog.kt`: HTTP API settings UI exposed (port, enable/disable, logging)
+   - `AndroidManifest.xml`: `<service android:name=".service.LlmHttpService" />` registered
+   - `build.gradle.kts`: NanoHTTPD dependency present
+
+3. **Verify model/runtime compatibility:**
+   - `LlmHttpService.pickDefaultLlmModel()`: Works with new `Model` structure
+   - `LlmHttpService` calls correct inference method (likely `LlmChatModelHelper.runInference` or new `LlmModelHelper`)
+
+4. **Test HTTP endpoints manually:**
+   ```bash
+   # Enable HTTP API in settings, then:
+   curl http://127.0.0.1:9006/ping
+   # Expected: {"status": "ok"}
+
+   curl -X POST http://127.0.0.1:9006/generate \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "Hello"}'
+   # Expected: {"text": "...", "usage": {...}}
+
+   curl -X POST http://127.0.0.1:9006/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{...}'
+   # Expected: OpenAI-format response (if implemented)
+   ```
+
+5. **Hardening (optional but recommended):**
+   - Add `android:foregroundServiceType="specialUse"` to manifest for LlmHttpService
+   - Ensures proper foreground service handling on Android 14+
+
+6. **Commit:** `chore: verify HTTP API compatibility with upstream changes`  
+   **Tag:** `phase-3-http-api-verified`
+
+---
+
+## **Phase 4: Resolve Remaining Conflicts** (3–4 hrs)
+
+**Goal:** Handle remaining modified files and edge cases.
+
+### Hotspot Resolution Guide:
+
+| File | Fork Likely Has | Upstream Has | Action |
+|------|-----------------|--------------|--------|
+| `AndroidManifest.xml` | HTTP service | FCM service, benchmark activities | **Merge:** Keep HTTP, add FCM/benchmark |
+| `GalleryApplication.kt` | HTTP startup | Possibly FCM setup | **Merge:** Keep both |
+| `HomeScreen.kt` | HTTP settings UI | Benchmark button, reorganized layout | **Check:** Re-add HTTP UI if removed |
+| `SettingsDialog.kt` | HTTP port/logging | New settings | **Merge:** Keep both |
+| `GalleryAppTopBar.kt` | HTTP status indicator | Action icons | **Check:** Preserve HTTP status if present |
+| `build.gradle.kts` | NanoHTTPD, no Room | FCM, Moshi, no Room | **Merge:** Keep NanoHTTPD, add FCM/Moshi |
+| `DataStoreRepository.kt` | Possible chat history refs | DataStore-only | **Clean:** Remove chat history refs |
+| `Config.kt`, `Model.kt` | Thinking mode | Thinking support | **Check:** Likely already merged |
+
+### Workflow:
+1. `git diff --name-only upstream/main | wc -l` — if <10 files, proceed to 4.2; else enumerate all
+2. For each diff, decide: accept upstream, keep fork, or merge manually
+3. Test build after every 3–4 files
+4. Verify gradle dependencies: `./gradlew dependencies --configuration=implementation`
+
+5. **Commit:** `chore: resolve remaining conflicts and finalize core integration`  
+   **Tag:** `phase-4-conflicts-resolved`
+
+---
+
+## **Phase 5: Testing & Validation** (2–3 hrs)
+
+**Goal:** Ensure all features work post-integration.
+
+### Build Validation:
+```bash
+./gradlew clean assembleDebug
+./gradlew assembleRelease  # Optional
+```
+
+### Feature Test Matrix:
+
+| Feature | Test | Expected |
+|---------|------|----------|
+| **Chat** | Multi-turn conversation | Model loads, inference works, state maintained |
+| **Thinking** | Enable thinking in config, chat | Thinking block appears, collapsible, response follows |
+| **Benchmarks** | Select model, run benchmark | TTFT, decode speed displayed |
+| **TinyGarden** | Interact in-game | Plant/water/harvest commands work |
+| **HTTP API** | `/ping`, `/generate` | Endpoints respond, inference works, stats returned |
+| **Settings** | Adjust temperature, max tokens | Config persists, model reinitializes |
+| **Model Import** | Import HF model | Downloads, imported, appears in list |
+
+### HTTP API Regression Testing:
+- Enable HTTP API in settings
+- Test `/ping`, `/generate`, `/v1/chat/completions`
+- Verify payload logging (if enabled)
+- Check logcat for errors
+
+### Performance:
+- Monitor TTFT, decode speed (should match or improve upstream)
+- Check memory (no excessive spikes)
+- Cold-start HTTP service from settings
+
+5. **Commit:** `chore: complete upstream sync and validation`  
+   **Tag:** `phase-5-validated`
+
+---
+
+## **Phase 6: CI/CD & Workflow** (1–2 hrs)
+
+**Goal:** Ensure GitHub Actions workflows are correct.
+
+### Tasks:
+1. **Workflow file choice:**
+   - Fork has `.github/workflows/android-apk.yml` (simpler, focused on APK)
+   - Upstream has `.github/workflows/build_android.yaml` (potentially more comprehensive)
+   - **Recommendation:** Keep fork's `android-apk.yml` as primary; optionally merge both if upstream's adds value (unit tests, lint)
+
+2. **Ensure triggers on:**
+   - `Android/src/**`
+   - `model_allowlist.json`
+   - `.github/workflows/**`
+
+3. **Ensure dependencies available:**
+   - NanoHTTPD should be accessible via Maven Central (automatic)
+
+4. **Optional enhancements:**
+   - Add lint checks: `./gradlew lint`
+   - Add APK size reporting
+   - Run unit tests if any exist
+
+5. **Commit:** `ci: update workflows and CI configuration`  
+   **Tag:** `phase-6-ci-updated`
+
+---
+
+## **Phase 7: Documentation** (1 hr)
+
+**Goal:** Ensure docs reflect current state.
+
+### Tasks:
+1. Update main `README.md`: version 1.0.11, note fork preserves HTTP API
+2. Update/archive `IMPLEMENTATION_PLAN.md`
+3. Document HTTP API usage (endpoints, request/response format)
+4. Update `DEVELOPMENT.md` if it exists
+
+5. **Commit:** `docs: update documentation for 1.0.11 release`  
+   **Tag:** `phase-7-docs-updated`
+
+---
+
+## **Rollback Strategy & Tags**
+
+**Safety checkpoints:**
+```bash
+git tag phase-1-chat-history-removal
+git tag phase-2-core-features
+git tag phase-3-http-api-verified
+git tag phase-4-conflicts-resolved
+git tag phase-5-validated
+git tag phase-6-ci-updated
+git tag phase-7-docs-updated
+git tag upstream-sync-complete
+```
+
+**Rollback:** If a phase fails, `git reset --hard <tag>` to last good state.
+
+---
+
+## **Risk Summary**
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| HTTP API lost | Critical | Verify at phases 3, 5; test `/ping`, `/generate` endpoints |
+| Build fails | High | Build after each phase; check gradle dependencies upfront |
+| Inference broken | High | Test with real models; verify model initialization |
+| Merge conflicts | Medium | Phased approach, resolve conflicts early |
+| Dependency hell | Medium | Check version compatibility (libs.versions.toml) upfront |
+| Service crashes | Medium | Test foreground service lifecycle; verify manifest registration |
+
+---
+
+## **Recommended Timeline**
+
+| Phase | Duration | When | Day |
+|-------|----------|------|-----|
+| 1 | 2–3 hrs | Morning | Day 1 |
+| 2 | 4–6 hrs | Afternoon | Day 1 |
+| 3 | 2–3 hrs | Morning | Day 2 |
+| 4 | 3–4 hrs | Afternoon | Day 2 |
+| 5 | 2–3 hrs | Morning | Day 3 |
+| 6 | 1–2 hrs | Afternoon | Day 3 |
+| 7 | 1 hr | Evening | Day 3 |
+
+**Total:** 15–22 hours
+
+---
+
+## **Success Criteria (Final)**
+
+✅ Fork at parity with upstream 1.0.11  
+✅ All new features (benchmarks, FCM, thinking, TinyGarden) functional  
+✅ Build clean, no warnings, APK reasonable size  
+✅ HTTP API preserved, `/ping` and `/generate` work correctly  
+✅ Chat history cleanly removed (no Room/database code)  
+✅ All unit tests pass (if any)  
+✅ Documentation current  
+
+---
+
+## **Key Decision Points for Stakeholder**
+
+1. **HTTP API scope:** Should HTTP clients enable thinking mode? Or read-only inference only?
+2. **Benchmark accessibility:** Should benchmark results be accessible via HTTP?
+3. **FCM integration:** Is FCM needed? If not, skip Phase 2.2 to save time.
+4. **Keeping fork in sync:** Post-1.0.11, cherry-pick monthly or wait for major releases?
+
+This plan provides a **structured, low-risk path** to upstream parity while preserving the fork's critical HTTP API feature. Each phase is a clear checkpoint with rollback safety.
