@@ -30,6 +30,8 @@ import com.google.ai.edge.gallery.data.DEFAULT_TOPP
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.gallery.runtime.CleanUpListener
+import com.google.ai.edge.gallery.runtime.BenchmarkConfig
+import com.google.ai.edge.gallery.runtime.BenchmarkRunResult
 import com.google.ai.edge.gallery.runtime.LlmModelHelper
 import com.google.ai.edge.gallery.runtime.ResultListener
 import com.google.ai.edge.litertlm.Backend
@@ -45,6 +47,7 @@ import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
+import com.google.ai.edge.litertlm.benchmark
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
 import kotlin.math.min
@@ -380,11 +383,11 @@ object LlmChatModelHelper : LlmModelHelper {
     input: String,
     resultListener: ResultListener,
     cleanUpListener: CleanUpListener,
-    onError: (message: String) -> Unit = {},
-    images: List<Bitmap> = listOf(),
-    audioClips: List<ByteArray> = listOf(),
-    coroutineScope: CoroutineScope? = null,
-    extraContext: Map<String, String>? = null,
+    onError: (message: String) -> Unit,
+    images: List<Bitmap>,
+    audioClips: List<ByteArray>,
+    coroutineScope: CoroutineScope?,
+    extraContext: Map<String, String>?,
   ) {
     val instance = model.instance as LlmModelInstance
 
@@ -483,5 +486,33 @@ object LlmChatModelHelper : LlmModelHelper {
   override fun stopResponse(model: Model) {
     val instance = model.instance as? LlmModelInstance ?: return
     instance.conversation.cancelProcess()
+  }
+
+  @OptIn(ExperimentalApi::class)
+  override fun runBenchmark(
+    context: Context,
+    model: Model,
+    config: BenchmarkConfig,
+  ): BenchmarkRunResult {
+    val backend: Backend =
+      when (config.accelerator.lowercase()) {
+        "gpu" -> Backend.GPU()
+        "npu" -> Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+        else -> Backend.CPU()
+      }
+    val benchmarkInfo =
+      benchmark(
+        modelPath = model.getPath(context = context),
+        backend = backend,
+        prefillTokens = config.prefillTokens,
+        decodeTokens = config.decodeTokens,
+        cacheDir = config.cacheDir,
+      )
+    return BenchmarkRunResult(
+      initTimeMs = benchmarkInfo.initTimeInSecond * 1000.0,
+      prefillTokensPerSecond = benchmarkInfo.lastPrefillTokensPerSecond,
+      decodeTokensPerSecond = benchmarkInfo.lastDecodeTokensPerSecond,
+      timeToFirstTokenSeconds = benchmarkInfo.timeToFirstTokenInSecond,
+    )
   }
 }

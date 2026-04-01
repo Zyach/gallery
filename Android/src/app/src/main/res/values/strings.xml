@@ -250,4 +250,6 @@
   <string name="cd_show_history">Show history</string>
   <!-- Content description spoken when the "more options" icon is focused. [CHAR_LIMIT=NONE] -->
   <string name="cd_more_options">More options</string>
+  <!-- Content description spoken when the "help" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_help">Help</string>
 </resources>
