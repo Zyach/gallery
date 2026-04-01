@@ -408,8 +408,7 @@ object LlmChatModelHelper : LlmModelHelper {
     }
 
     val thinkingEnabled = extraContext?.get("enable_thinking") == "true"
-    var insideThinking = false
-    val thinkingBuffer = StringBuilder()
+    val thinkingAccumulator = if (thinkingEnabled) ThinkingTagAccumulator() else null
 
     conversation.sendMessageAsync(
       Message.of(contents),
@@ -420,44 +419,25 @@ object LlmChatModelHelper : LlmModelHelper {
             return
           }
 
-          val token = message.toString()
-          var remaining = token
-
-          while (remaining.isNotEmpty()) {
-            if (!insideThinking) {
-              val openIdx = remaining.indexOf("<think>")
-              if (openIdx == -1) {
-                resultListener(remaining, false, null)
-                remaining = ""
-              } else {
-                val before = remaining.substring(0, openIdx)
-                if (before.isNotEmpty()) {
-                  resultListener(before, false, null)
-                }
-                insideThinking = true
-                thinkingBuffer.clear()
-                remaining = remaining.substring(openIdx + "<think>".length)
-              }
-            } else {
-              val closeIdx = remaining.indexOf("</think>")
-              if (closeIdx == -1) {
-                thinkingBuffer.append(remaining)
-                resultListener("", false, remaining)
-                remaining = ""
-              } else {
-                val thinkingChunk = remaining.substring(0, closeIdx)
-                if (thinkingChunk.isNotEmpty()) {
-                  thinkingBuffer.append(thinkingChunk)
-                  resultListener("", false, thinkingChunk)
-                }
-                insideThinking = false
-                remaining = remaining.substring(closeIdx + "</think>".length)
-              }
+          thinkingAccumulator?.consume(message.toString())?.forEach { chunk ->
+            if (chunk.text.isNotEmpty()) {
+              resultListener(chunk.text, false, null)
+            }
+            if (chunk.thinking.isNotEmpty()) {
+              resultListener("", false, chunk.thinking)
             }
           }
         }
 
         override fun onDone() {
+          thinkingAccumulator?.finish()?.let { chunk ->
+            if (chunk.text.isNotEmpty()) {
+              resultListener(chunk.text, false, null)
+            }
+            if (chunk.thinking.isNotEmpty()) {
+              resultListener("", false, chunk.thinking)
+            }
+          }
           resultListener("", true, null)
         }
 

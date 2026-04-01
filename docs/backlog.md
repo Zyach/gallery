@@ -16,7 +16,7 @@
 
 - [x] `SEC-01` Bind NanoHTTPD a 127.0.0.1
 - [x] `SEC-02` Auth Bearer token en HTTP API
-- [ ] `SEC-03` Inferencia HTTP stateless (reset por request)
+- [x] `SEC-03` Inferencia HTTP stateless (reset por request)
 - [x] `SEC-04` Errores JSON estructurados en HTTP
 - [x] `SEC-05` Payload logging solo opt-in
 - [x] `ERR-01` Fix error silencioso en LlmSingleTurnViewModel
@@ -49,14 +49,16 @@
 
 ## Hecho en este ciclo
 
+- [x] Base inicial de tests JVM para parseo de thinking y helpers puros del bridge HTTP.
 - [x] Bind loopback explícito (SEC-01)
 - [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
+- [x] Reset conversacional por request para mantener la API HTTP stateless (SEC-03)
 - [x] 404 para model IDs desconocidos (HTTP-02)
 - [x] Errores JSON (SEC-04)
 - [x] Payload logging opt-in (SEC-05)
 - [x] Fix error single-turn (ERR-01)
 - [x] Cap retry (ERR-02)
-- [x] CI upgrade: tests + lint + release (CI-01)
+- [x] CI build automático relevante tras push (CI-01)
 - [x] Thinking mode E2E (THINK-01)
 - [x] Doc divergencias (DOC-02)
 - [x] Informe de consultoría multi-rol

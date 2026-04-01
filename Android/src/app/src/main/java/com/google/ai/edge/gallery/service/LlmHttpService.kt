@@ -158,9 +158,6 @@ class LlmHttpService : Service() {
     }
   }
 
-  private fun normalizeModelKey(value: String): String =
-    value.lowercase().replace(Regex("[^a-z0-9]"), "")
-
   private fun allowlistModels(): List<AllowedModel> {
     val fresh = readAllowlistFromExternalFiles()
     if (fresh != null && fresh.models.isNotEmpty()) {
@@ -185,10 +182,11 @@ class LlmHttpService : Service() {
       return defaultModel
     }
 
-    val key = normalizeModelKey(requested)
+    val key = LlmHttpBridgeUtils.normalizeModelKey(requested)
     val allowlist = allowlistModels()
     val allowed = allowlist.firstOrNull { model ->
-      normalizeModelKey(model.name) == key || normalizeModelKey(model.modelId) == key
+      LlmHttpBridgeUtils.normalizeModelKey(model.name) == key ||
+        LlmHttpBridgeUtils.normalizeModelKey(model.modelId) == key
     }
     if (allowed == null) return defaultModel
 
@@ -536,13 +534,23 @@ class LlmHttpService : Service() {
       }
 
       val sb = StringBuilder()
-      val latch = CountDownLatch(1)
+      val inferenceLatch = CountDownLatch(1)
+      val requestLifecycleLatch = CountDownLatch(1)
       var error: String? = null
       val startMs = SystemClock.elapsedRealtime()
       var firstTokenMs: Long? = null
       executor.execute {
         synchronized(inferenceLock) {
           try {
+            // Keep the model warm, but reset conversation state for every HTTP request while
+            // holding the same lock used for generation so overlapping requests cannot invalidate
+            // an in-flight conversation and each request starts from a clean conversation state.
+            LlmChatModelHelper.resetConversation(
+              model = model,
+              supportImage = false,
+              supportAudio = false,
+              systemInstruction = null,
+            )
             LlmChatModelHelper.runInference(
               model = model,
               input = prompt,
@@ -553,29 +561,43 @@ class LlmHttpService : Service() {
                   }
                   sb.append(partial)
                 }
-                if (done) latch.countDown()
+                if (done) inferenceLatch.countDown()
               },
               cleanUpListener = {},
-              onError = { e -> error = e; latch.countDown() },
+              onError = { e -> error = e; inferenceLatch.countDown() },
             )
+
+            // Hold the request lock for the full lifetime of the async inference so no later
+            // request can reset the conversation while this one is still generating.
+            val completed = inferenceLatch.await(timeoutSeconds, TimeUnit.SECONDS)
+            if (!completed && error == null) {
+              error = "timeout"
+              cancelInference(
+                model = model,
+                requestId = requestId,
+                endpoint = endpoint,
+                reason = "timeout",
+              )
+              LlmChatModelHelper.resetConversation(
+                model = model,
+                supportImage = false,
+                supportAudio = false,
+                systemInstruction = null,
+              )
+            } else if (error != null) {
+              cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "error")
+            }
           } catch (t: Throwable) {
             error = t.message
-            latch.countDown()
+            inferenceLatch.countDown()
+          } finally {
+            requestLifecycleLatch.countDown()
           }
         }
       }
-      val completed = latch.await(timeoutSeconds, TimeUnit.SECONDS)
-      if (!completed) {
+      val completed = requestLifecycleLatch.await(timeoutSeconds + 5, TimeUnit.SECONDS)
+      if (!completed && error == null) {
         error = "timeout"
-        cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "timeout")
-        LlmChatModelHelper.resetConversation(
-          model = model,
-          supportImage = false,
-          supportAudio = false,
-          systemInstruction = null,
-        )
-      } else if (error != null) {
-        cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "error")
       }
       val totalMs = SystemClock.elapsedRealtime() - startMs
       val ttfbMs = firstTokenMs?.toString() ?: "-1"
@@ -741,8 +763,7 @@ class LlmHttpService : Service() {
       if (expectedToken.isBlank()) return null
 
       val header = session.headers["authorization"] ?: session.headers["Authorization"] ?: ""
-      val expectedHeader = "Bearer $expectedToken"
-      if (header == expectedHeader) return null
+      if (LlmHttpBridgeUtils.isBearerAuthorized(expectedToken, header)) return null
 
       return unauthorized("unauthorized")
     }

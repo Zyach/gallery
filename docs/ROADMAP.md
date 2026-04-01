@@ -17,13 +17,13 @@ Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garde
 - [x] Errores JSON estructurados
 - [x] Payload logging opt-in only
 - [x] Auth Bearer token
-- [ ] Inferencia stateless por request
+- [x] Inferencia stateless por request
 - [x] Rechazar model IDs desconocidos con 404
 
 ### Fase B — Safety net
 - [x] Fix error silencioso single-turn
 - [x] Cap retry loop resetSession
-- [ ] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags)
+- [ ] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags) — base inicial ya añadida
 - [x] CI: build automático relevante tras push
 
 ### Fase C — Arquitectura
