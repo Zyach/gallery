@@ -9,6 +9,8 @@ import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class ProtoSerializersTest {
@@ -33,9 +35,14 @@ class ProtoSerializersTest {
     assertEquals(original, decoded)
   }
 
-  @Test(expected = CorruptionException::class)
+  @Test
   fun settingsSerializerRejectsInvalidBytes() = runBlocking {
-    SettingsSerializer.readFrom(ByteArrayInputStream("not-a-proto".toByteArray()))
+    try {
+      SettingsSerializer.readFrom(ByteArrayInputStream("not-a-proto".toByteArray()))
+      fail("Expected invalid proto bytes to fail")
+    } catch (e: Exception) {
+      assertTrue(e is CorruptionException)
+    }
   }
 
   @Test
@@ -49,9 +56,14 @@ class ProtoSerializersTest {
     assertEquals(original, decoded)
   }
 
-  @Test(expected = CorruptionException::class)
+  @Test
   fun benchmarkResultsSerializerRejectsInvalidBytes() = runBlocking {
-    BenchmarkResultsSerializer.readFrom(ByteArrayInputStream(byteArrayOf(1, 2, 3)))
+    try {
+      BenchmarkResultsSerializer.readFrom(ByteArrayInputStream(byteArrayOf(1, 2, 3)))
+      fail("Expected invalid proto bytes to fail")
+    } catch (e: Exception) {
+      assertTrue(e is CorruptionException)
+    }
   }
 
   @Test
@@ -65,8 +77,13 @@ class ProtoSerializersTest {
     assertEquals(original, decoded)
   }
 
-  @Test(expected = CorruptionException::class)
+  @Test
   fun cutoutsSerializerRejectsInvalidBytes() = runBlocking {
-    CutoutsSerializer.readFrom(ByteArrayInputStream(byteArrayOf(9, 9, 9)))
+    try {
+      CutoutsSerializer.readFrom(ByteArrayInputStream(byteArrayOf(9, 9, 9)))
+      fail("Expected invalid proto bytes to fail")
+    } catch (e: Exception) {
+      assertTrue(e is CorruptionException)
+    }
   }
 }
