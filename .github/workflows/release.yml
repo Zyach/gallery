@@ -59,8 +59,8 @@ jobs:
           fi
 
           gh release create "$TAG" \
-            ../app/build/outputs/apk/debug/*.apk \
-            ../app/build/outputs/apk/release/*.apk \
+            app/build/outputs/apk/debug/*.apk \
+            app/build/outputs/apk/release/*.apk \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
             --generate-notes \
