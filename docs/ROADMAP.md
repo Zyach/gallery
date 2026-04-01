@@ -29,7 +29,7 @@ Nota: la siguiente capa de cierre para HTTP ya no es hardening básico sino smok
 - [x] CI: build automático relevante tras push
 
 ### Fase C — Arquitectura
-- [ ] Extraer LlmHttpService en componentes (ModelResolver, InferenceGateway, ApiRenderer)
+- [ ] Extraer LlmHttpService en componentes (ModelResolver, InferenceGateway, ApiRenderer) — iniciada
 - [ ] Unificar allowlist app/servicio — iniciada
 - [ ] Estandarizar kotlinx.serialization (eliminar Gson del servicio) — iniciada
 

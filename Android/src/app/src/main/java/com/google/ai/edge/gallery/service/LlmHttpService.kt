@@ -118,10 +118,7 @@ class LlmHttpService : Service() {
 
   private fun pickDefaultLlmModel(): Model? {
     val allowlist = allowlistModels()
-    val preferred = allowlist.firstOrNull { it.name == "Gemma3-1B-IT" }
-    val base = (preferred ?: allowlist.firstOrNull { allowed ->
-      allowed.taskTypes.any { it.startsWith("llm", ignoreCase = true) }
-    })?.toModel() ?: return null
+    val base = LlmHttpModelResolver.pickDefaultAllowedModel(allowlist)?.toModel() ?: return null
 
     // If user imported model into __imports, prefer that path.
     val imported = File(getExternalFilesDir(null), "__imports/gemma-3n-E2B-it-int4.litertlm")
@@ -181,12 +178,8 @@ class LlmHttpService : Service() {
       return defaultModel
     }
 
-    val key = LlmHttpBridgeUtils.normalizeModelKey(requested)
     val allowlist = allowlistModels()
-    val allowed = allowlist.firstOrNull { model ->
-      LlmHttpBridgeUtils.normalizeModelKey(model.name) == key ||
-        LlmHttpBridgeUtils.normalizeModelKey(model.modelId) == key
-    }
+    val allowed = LlmHttpModelResolver.selectAllowedModel(allowlist, requested)
     if (allowed == null) return defaultModel
 
     return modelCache.getOrPut(allowed.name) {
@@ -633,7 +626,7 @@ class LlmHttpService : Service() {
         .let(LlmHttpBridgeUtils::escapeSseText)
 
       fun emit(event: String, payload: String): String =
-        "event: $event\n" + "data: $payload\n\n"
+        LlmHttpResponseRenderer.emitSseEvent(event, payload)
 
       val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
       val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
@@ -670,7 +663,7 @@ class LlmHttpService : Service() {
       val respId = "resp-$now"
       val msgId = "msg-$now"
 
-      fun emit(event: String, payload: String): String = "event: $event\n" + "data: $payload\n\n"
+      fun emit(event: String, payload: String): String = LlmHttpResponseRenderer.emitSseEvent(event, payload)
 
       val toolJson = json.encodeToString(toolCall)
 
@@ -720,7 +713,7 @@ class LlmHttpService : Service() {
       val respId = "resp-$now"
       val msgId = "msg-$now"
 
-      fun emit(event: String, payload: String): String = "event: $event\n" + "data: $payload\n\n"
+      fun emit(event: String, payload: String): String = LlmHttpResponseRenderer.emitSseEvent(event, payload)
 
       val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
       val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
@@ -766,7 +759,7 @@ class LlmHttpService : Service() {
     }
 
     private fun jsonError(status: Response.Status, error: String): Response =
-      newFixedLengthResponse(status, "application/json", """{"error":"$error"}""")
+      newFixedLengthResponse(status, "application/json", LlmHttpResponseRenderer.renderJsonError(error))
 
     private fun badRequest(msg: String): Response =
       jsonError(Response.Status.BAD_REQUEST, msg)
@@ -789,23 +782,22 @@ class LlmHttpService : Service() {
 
   private fun modelsPayload(): String {
     val allowed = allowlistModels()
+    val fallbackId = defaultModel?.name ?: "local"
     if (allowed.isEmpty()) {
-      val fallbackId = defaultModel?.name ?: "local"
       Log.w(logTag, "Models list empty. source=$lastAllowlistSource fallback=$fallbackId")
-      return json.encodeToString(ModelList(data = listOf(ModelItem(id = fallbackId))))
+    } else {
+      Log.i(logTag, "Models list size=${allowed.size} source=$lastAllowlistSource")
     }
-    Log.i(logTag, "Models list size=${allowed.size} source=$lastAllowlistSource")
-    val models = allowed.map { item -> ModelItem(id = item.name) }
-    return json.encodeToString(ModelList(data = models))
+    return LlmHttpResponseRenderer.renderModelListPayload(
+      json = json,
+      modelIds = allowed.map { item -> item.name },
+      fallbackId = fallbackId,
+    )
   }
 
   @Serializable data class GenReq(val prompt: String)
 
   @Serializable data class Usage(val prompt_tokens: Int, val completion_tokens: Int)
-
-  @Serializable data class ModelItem(val id: String, val `object`: String = "model")
-
-  @Serializable data class ModelList(val `object`: String = "list", val data: List<ModelItem>)
 
   // Responses API minimal models
   @Serializable data class ResponsesRequest(

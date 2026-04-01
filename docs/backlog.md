@@ -41,6 +41,7 @@
 ## P2
 
 - [ ] `ARCH-01` Extraer LlmHttpService en componentes
+  - Estado: `ModelResolver` y `ResponseRenderer` ya extraídos; falta mover la orquestación principal del bridge.
 - [ ] `ARCH-02` Unificar allowlist app/servicio
   - Estado: parser compartido del allowlist ya reutilizado por servicio y model manager.
 - [ ] `ARCH-03` Estandarizar kotlinx.serialization
@@ -56,6 +57,7 @@
 - [x] Base inicial de tests JVM para parseo de thinking y helpers puros del bridge HTTP.
 - [x] Ampliacion de tests JVM para serializers proto y helpers puros de tareas.
 - [x] Workflow dedicado de tests JVM separado del workflow de build Android.
+- [x] Inicio de `ARCH-01` con extracción de resolver y renderer del bridge HTTP.
 - [x] Inicio de `RUNTIME-01` con benchmark/cancelación encaminados a `LlmModelHelper`.
 - [x] Inicio de `ARCH-02/03` con parser compartido del allowlist basado en `kotlinx.serialization`.
 - [x] Ampliacion de helpers y tests JVM del contrato del bridge HTTP.
