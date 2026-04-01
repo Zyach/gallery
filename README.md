@@ -1,9 +1,13 @@
 # Google AI Edge Gallery ✨
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/google-ai-edge/gallery)](https://github.com/google-ai-edge/gallery/releases)
+[![Android APK](https://github.com/Zyach/gallery/actions/workflows/android-apk.yml/badge.svg)](https://github.com/Zyach/gallery/actions/workflows/android-apk.yml)
+[![Release APK](https://github.com/Zyach/gallery/actions/workflows/release.yml/badge.svg)](https://github.com/Zyach/gallery/actions/workflows/release.yml)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Zyach/gallery)](https://github.com/Zyach/gallery/releases)
 
 **Explore, Experience, and Evaluate the Future of On-Device Generative AI with Google AI Edge.**
+
+> Maintained fork of [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery) with a local-only HTTP bridge for Every Code and additional fork governance in `docs/`.
 
 The Google AI Edge Gallery is an experimental app that puts the power of cutting-edge Generative AI models directly into your hands, running entirely on your Android *(available now)* and iOS *(available now via TestFlight)* devices. Dive into a world of creative and practical AI use cases, all running locally, without needing an internet connection once the model is loaded. Experiment with different models, chat, ask questions with images and audio clip, explore prompts, and more!
 
@@ -69,8 +73,9 @@ Check out the [development notes](DEVELOPMENT.md) for instructions about how to 
 
 This is an **experimental Beta release**, and your input is crucial!
 
-*   🐞 **Found a bug?** [Report it here!](https://github.com/google-ai-edge/gallery/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
-*   💡 **Have an idea?** [Suggest a feature!](https://github.com/google-ai-edge/gallery/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
+*   🐞 **Found a bug in this fork?** [Open an issue here](https://github.com/Zyach/gallery/issues/new/choose)
+*   💡 **Have a fork-specific idea?** [Start with the issue chooser](https://github.com/Zyach/gallery/issues/new/choose)
+*   🧭 **Need context first?** Read [docs/README.md](docs/README.md), [docs/STATE.md](docs/STATE.md), and [docs/FORK_DIVERGENCES.md](docs/FORK_DIVERGENCES.md)
 
 ## 📄 License
 
@@ -93,5 +98,15 @@ This fork adds:
 - **HTTP API loopback** — `LlmHttpService` on `127.0.0.1` for local-only inference via Every Code
 - **Thinking mode** — `<think>` tag parsing routes thinking tokens to collapsible UI panel
 - **Benchmark in navigation** — accessible from model screens
+
+## Fork governance
+
+- Living docs index: [docs/README.md](docs/README.md)
+- Current status: [docs/STATE.md](docs/STATE.md)
+- Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md)
+- Backlog: [docs/backlog.md](docs/backlog.md)
+- Deliberate divergences from upstream: [docs/FORK_DIVERGENCES.md](docs/FORK_DIVERGENCES.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Support guidance: [SUPPORT.md](SUPPORT.md)
 
 **Version: 0.3.0-alpha** | [Full status](docs/STATE.md) | [Roadmap](docs/ROADMAP.md) | [Backlog](docs/backlog.md) | [Divergences](docs/FORK_DIVERGENCES.md)

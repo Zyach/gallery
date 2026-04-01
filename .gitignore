@@ -2,6 +2,10 @@
 .gradle/
 device_report.txt
 Android/src/gradle.properties
+Android/src/local.properties
+Android/src/.gradle/
+Android/src/app/build/
+Android/src/hs_err_pid*.log
 mobile-actions/
 state/
 .code/

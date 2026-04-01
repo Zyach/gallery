@@ -1,29 +1,19 @@
-name: Android APK
+name: Release APK
 
 on:
   push:
-    paths:
-      - 'Android/src/**'
-      - 'model_allowlist.json'
-      - 'model_allowlists/**'
-      - '.github/workflows/android-apk.yml'
-  pull_request:
-    paths:
-      - 'Android/src/**'
-      - 'model_allowlist.json'
-      - 'model_allowlists/**'
-      - '.github/workflows/android-apk.yml'
-  workflow_dispatch:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: android-apk-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-apk:
+  release:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,10 +47,21 @@ jobs:
       - name: Build release APK
         run: ./gradlew --no-daemon :app:assembleRelease
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: gallery-debug-apk-${{ github.sha }}
-          path: Android/src/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if echo "$TAG" | grep -Eq '(-|alpha|beta|rc)'; then
+            PRERELEASE="--prerelease"
+          else
+            PRERELEASE=""
+          fi
+
+          gh release create "$TAG" \
+            ../app/build/outputs/apk/debug/*.apk \
+            ../app/build/outputs/apk/release/*.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --generate-notes \
+            $PRERELEASE

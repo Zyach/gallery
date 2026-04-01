@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a feature or improvement for this fork.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for fork-relevant improvements.
+        If the request is broadly about Google AI Edge Gallery and not this fork's deliberate differences, upstream may be the better home.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Fork-specific improvement
+        - Upstream-compatible improvement
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

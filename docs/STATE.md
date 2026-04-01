@@ -27,6 +27,7 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - Benchmark: ruta dedicada y botón en app bar.
 - HTTP service: bindeado a `127.0.0.1`, errores JSON, payload logging opt-in, Bearer token configurable y reset conversacional por request.
 - CI: build debug + release automático en GitHub Actions sobre cambios relevantes del código.
+- GitHub hygiene del fork: issue forms, Dependabot, release workflow por tag, release notes config, CODEOWNERS, SECURITY/SUPPORT y docs index.
 
 ### Gaps activos
 
