@@ -599,79 +599,14 @@ class LlmHttpService : Service() {
     }
 
     private fun sseResponse(modelId: String, text: String): Response {
-      val now = System.currentTimeMillis() / 1000
-      val respId = "resp-$now"
-      val msgId = "msg-$now"
-
-      fun esc(s: String): String = s
-        .let(LlmHttpBridgeUtils::escapeSseText)
-
-      fun emit(event: String, payload: String): String =
-        LlmHttpResponseRenderer.emitSseEvent(event, payload)
-
-      val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
-      val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
-      val itemAdded = """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""
-      val partAdded = """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""
-      val delta = """{"type":"response.output_text.delta","content_index":0,"delta":"${esc(text)}","item_id":"$msgId","output_index":0}"""
-      val deltaDone = """{"type":"response.output_text.done","content_index":0,"item_id":"$msgId","output_index":0,"text":"${esc(text)}"}"""
-      val partDone = """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"${esc(text)}"}}"""
-      val itemDone = """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"${esc(text)}"}],"role":"assistant"},"output_index":0}"""
-      val completed = """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"${esc(text)}"}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""
-
-      val ssePayload = buildString {
-        append(emit("response.created", created))
-        append(emit("response.in_progress", inProgress))
-        append(emit("response.output_item.added", itemAdded))
-        append(emit("response.content_part.added", partAdded))
-        append(emit("response.output_text.delta", delta))
-        append(emit("response.output_text.done", deltaDone))
-        append(emit("response.content_part.done", partDone))
-        append(emit("response.output_item.done", itemDone))
-        append(emit("response.completed", completed))
-        append("data: [DONE]\n\n")
-      }
-
-      val input = ByteArrayInputStream(ssePayload.toByteArray(Charsets.UTF_8))
-      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", input)
-      resp.addHeader("Cache-Control", "no-cache")
-      resp.addHeader("Connection", "keep-alive")
-      return resp
+      val ssePayload = LlmHttpResponseRenderer.buildTextSsePayload(modelId, text)
+      return chunkedSseResponse(ssePayload)
     }
 
     private fun sseResponseToolCall(modelId: String, toolCall: ToolCall): Response {
-      val now = System.currentTimeMillis() / 1000
-      val respId = "resp-$now"
-      val msgId = "msg-$now"
-
-      fun emit(event: String, payload: String): String = LlmHttpResponseRenderer.emitSseEvent(event, payload)
-
       val toolJson = json.encodeToString(toolCall)
-
-      val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
-      val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
-      val itemAdded = """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""
-      val partAdded = """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_tool_call","tool_call":$toolJson}}"""
-      val partDone = """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_tool_call","tool_call":$toolJson}}"""
-      val itemDone = """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_tool_call","tool_call":$toolJson}],"role":"assistant"},"output_index":0}"""
-      val completed = """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_tool_call","tool_call":$toolJson}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""
-
-      val ssePayload = buildString {
-        append(emit("response.created", created))
-        append(emit("response.in_progress", inProgress))
-        append(emit("response.output_item.added", itemAdded))
-        append(emit("response.content_part.added", partAdded))
-        append(emit("response.content_part.done", partDone))
-        append(emit("response.output_item.done", itemDone))
-        append(emit("response.completed", completed))
-        append("data: [DONE]\n\n")
-      }
-
-      val input = ByteArrayInputStream(ssePayload.toByteArray(Charsets.UTF_8))
-      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", input)
-      resp.addHeader("Cache-Control", "no-cache")
-      resp.addHeader("Connection", "keep-alive")
-      return resp
+      val ssePayload = LlmHttpResponseRenderer.buildToolCallSsePayload(modelId, toolJson)
+      return chunkedSseResponse(ssePayload)
     }
 
     private fun emptyResponse(modelId: String, stream: Boolean): Response {
@@ -689,37 +624,11 @@ class LlmHttpService : Service() {
         usage = Usage(prompt_tokens = 0, completion_tokens = 0),
       )
       if (!stream) return okJsonText(json.encodeToString(respBody))
+      return sseResponse(modelId, "")
+    }
 
-      val now = System.currentTimeMillis() / 1000
-      val respId = "resp-$now"
-      val msgId = "msg-$now"
-
-      fun emit(event: String, payload: String): String = LlmHttpResponseRenderer.emitSseEvent(event, payload)
-
-      val created = """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
-      val inProgress = """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""
-      val itemAdded = """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""
-      val partAdded = """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""
-      val delta = """{"type":"response.output_text.delta","content_index":0,"delta":"","item_id":"$msgId","output_index":0}"""
-      val deltaDone = """{"type":"response.output_text.done","content_index":0,"item_id":"$msgId","output_index":0,"text":""}"""
-      val partDone = """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""
-      val itemDone = """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":""}],"role":"assistant"},"output_index":0}"""
-      val completed = """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":""}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""
-
-      val ssePayload = buildString {
-        append(emit("response.created", created))
-        append(emit("response.in_progress", inProgress))
-        append(emit("response.output_item.added", itemAdded))
-        append(emit("response.content_part.added", partAdded))
-        append(emit("response.output_text.delta", delta))
-        append(emit("response.output_text.done", deltaDone))
-        append(emit("response.content_part.done", partDone))
-        append(emit("response.output_item.done", itemDone))
-        append(emit("response.completed", completed))
-        append("data: [DONE]\n\n")
-      }
-
-      val input = ByteArrayInputStream(ssePayload.toByteArray(Charsets.UTF_8))
+    private fun chunkedSseResponse(payload: String): Response {
+      val input = ByteArrayInputStream(payload.toByteArray(Charsets.UTF_8))
       val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", input)
       resp.addHeader("Cache-Control", "no-cache")
       resp.addHeader("Connection", "keep-alive")

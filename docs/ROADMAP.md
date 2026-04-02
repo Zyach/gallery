@@ -2,57 +2,59 @@
 
 > Ultima actualizacion: 2026-04-02.
 
----
+## Objetivo
 
-## Visión
+Converger con upstream de forma gradual, manteniendo estable el bridge HTTP local, Tiny Garden y la direccion sin chat history persistente.
 
-Convergencia sostenible con upstream manteniendo: puente HTTP seguro, Tiny Garden, sin chat history persistente.
+## Tracks activos
 
----
+### 1. Bridge HTTP
 
-## Fases
+Objetivo: terminar de sacar logica de `LlmHttpService` a componentes puros y cerrar una validacion mas fuerte del servicio vivo.
 
-### Fase A — Hardening HTTP ← **activa**
-- [x] Bind explícito a 127.0.0.1
-- [x] Errores JSON estructurados
-- [x] Payload logging opt-in only
-- [x] Auth Bearer token
-- [x] Inferencia stateless por request
-- [x] Rechazar model IDs desconocidos con 404
+Estado:
 
-Nota: la siguiente capa de cierre para HTTP ya no es hardening básico sino smoke/contract validation del bridge.
+- Hardening basico completado.
+- Refactor incremental en progreso.
+- Smoke E2E on-device basica ya validada.
 
-### Fase B — Safety net
-- [x] Fix error silencioso single-turn
-- [x] Cap retry loop resetSession
-- [x] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags)
-- [x] CI: build automático relevante tras push
+Siguiente paso:
 
-Nota: el mantenimiento de workflows ya quedó adelantado frente al cutoff de Node.js 20 en GitHub Actions.
+- seguir reduciendo la orquestacion dentro de `LlmHttpService`
+- ampliar smoke tests del bridge vivo
 
-### Fase C — Arquitectura
-- [ ] Extraer LlmHttpService en componentes (ModelResolver, InferenceGateway, ApiRenderer) — iniciada
-- [ ] Unificar allowlist app/servicio — iniciada
-- [ ] Estandarizar kotlinx.serialization (eliminar Gson del servicio) — iniciada
+### 2. Runtime convergence
 
-Nota: `ARCH-01` ya incluye extracción incremental de resolver de modelos, model factory, renderer, DTOs/request adapter y route resolver del bridge.
+Objetivo: terminar la migracion a `LlmModelHelper` en flujos clave y reducir acoplamientos al helper concreto.
 
-### Fase D — Runtime y convergencia upstream
-- [ ] Completar migración runtimeHelper (cancelación/benchmark via helper) — iniciada
-- [ ] Convergencia por batches temáticos con upstream
-- [ ] Validación funcional thinking + benchmark en dispositivo
+Estado:
 
-### Fase E — Producción
-- [ ] SSE streaming real token-by-token
-- [x] Eliminar runBlocking en DataStoreRepository
-- [ ] Release signing con keystore propio + minify
+- benchmark y cancelacion ya avanzaron
+- faltan mas flujos y limpieza de contratos
 
----
+### 3. Data and serialization
 
-## Hitos de versión
+Objetivo: cerrar la unificacion de allowlist y JSON con `kotlinx.serialization`.
 
-| Versión | Requisitos |
+Estado:
+
+- parser compartido ya activo
+- quedan rutas residuales por consolidar
+
+### 4. Release readiness
+
+Objetivo: preparar el fork para una beta mas estable.
+
+Pendiente:
+
+- SSE token-by-token real
+- signing propio
+- minify y endurecimiento de release
+
+## Hitos
+
+| Version | Criterio |
 |---|---|
-| 0.3.0-alpha | Estado actual |
-| 0.5.0-beta | Fases A + B completas |
-| 1.0.0 | Fases A-D completas + validación E2E |
+| `0.3.0-alpha` | estado actual |
+| `0.5.0-beta` | hardening + safety net consolidados |
+| `1.0.0` | bridge, runtime y capas principales estabilizadas con validacion E2E |

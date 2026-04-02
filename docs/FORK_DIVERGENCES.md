@@ -1,64 +1,31 @@
-# Fork Divergences — gallery
+# FORK_DIVERGENCES — gallery
 
-> Divergencias deliberadas del fork respecto a `upstream/main`.
-> Ultima actualizacion: 2026-03-30.
+> Ultima actualizacion: 2026-04-02.
 
----
+## Divergencias activas y deliberadas
 
-## 1. Puente HTTP local (Every Code)
+### 1. Bridge HTTP local
 
-**Archivos exclusivos del fork:**
-- `service/LlmHttpService.kt` — servidor HTTP loopback en `127.0.0.1`
-- `data/LlmHttpPrefs.kt` — preferencias del servicio HTTP
-- Superficie en `SettingsDialog.kt` (toggle, puerto, logging)
+El fork mantiene un bridge HTTP local para Every Code sobre `127.0.0.1`.
 
-**Razon:** permite que clientes locales (Every Code) invoquen modelos on-device via API REST sin exponer red.
+Archivos clave:
 
-**Endpoints:**
-- `GET /ping`
-- `GET /v1/models`
-- `POST /generate`
-- `POST /v1/chat/completions`
+- `service/LlmHttpService.kt`
+- `data/LlmHttpPrefs.kt`
+- superficies de settings relacionadas
 
----
+### 2. Sin chat history persistente
 
-## 2. Chat history persistente — alineado con upstream
+No es un objetivo del fork reintroducir chat history persistente.
 
-**Archivos eliminados del fork:**
-- `data/chathistory/*` (DAO, Room DB, entities, export, crypto, repository)
-- `ui/history/*` (ChatHistoryScreen, ChatHistoryViewModel)
+### 3. Thinking mode mas completo
 
-**Nota:** upstream tampoco tiene chat history persistente en `main`. Estos archivos fueron codigo propio del fork o de una rama experimental. Su eliminacion deja el fork alineado con upstream en este punto. No es una divergencia activa sino una decision de no reintroducir algo que upstream no tiene.
+El fork mantiene parsing de tags `<think>` y la cadena de UI asociada, porque upstream no la cierra completamente en el mismo grado.
 
----
+### 4. Benchmark expuesto en el producto
 
-## 3. Thinking mode — parsing de tags en runtime helper
+El fork ya conecta benchmark en navegacion y pantallas relacionadas.
 
-**Archivo modificado:**
-- `ui/llmchat/LlmChatModelHelper.kt`
+### 5. Documentacion operativa propia
 
-**Divergencia:** upstream no implementa el enrutamiento de thinking tokens; el fork parsea `<think>`/`</think>` tags en `onMessage` y los pasa como `partialThinkingResult` al `ResultListener`. Esto cierra la cadena thinking que upstream deja abierta.
-
-**Impacto:** modelos que emiten tags `<think>` (ej: Gemma-3 thinking) muestran el panel de thinking en la UI.
-
----
-
-## 4. Benchmark — ruta dedicada desde pantallas de modelo
-
-**Archivos modificados:**
-- `GalleryNavGraph.kt` — ruta `benchmark/{modelName}`
-- `ModelPageAppBar.kt` — boton de acceso a benchmark
-- `ui/benchmark/*` — pantallas presentes
-
-**Divergencia:** upstream no expone benchmark en navegacion todavia; el fork lo conecta directamente.
-
----
-
-## 5. Documentacion viva en `docs/`
-
-**Archivos exclusivos del fork:**
-- `docs/STATE.md`, `docs/ROADMAP.md`, `docs/backlog.md`
-- `docs/UPSTREAM_CATCHUP_PLAN.md`
-- `docs/FORK_DIVERGENCES.md` (este archivo)
-
-**Razon:** trazabilidad operativa del fork independiente de upstream.
+El fork mantiene `docs/` como fuente viva para estado, roadmap, backlog y estrategia de convergencia.
