@@ -1,6 +1,6 @@
 # ROADMAP — gallery fork
 
-> Ultima actualizacion: 2026-03-30.
+> Ultima actualizacion: 2026-04-01.
 
 ---
 
@@ -40,7 +40,7 @@ Nota: la siguiente capa de cierre para HTTP ya no es hardening básico sino smok
 
 ### Fase E — Producción
 - [ ] SSE streaming real token-by-token
-- [ ] Eliminar runBlocking en DataStoreRepository
+- [x] Eliminar runBlocking en DataStoreRepository
 - [ ] Release signing con keystore propio + minify
 
 ---

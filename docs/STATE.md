@@ -1,6 +1,6 @@
 # STATE — gallery fork
 
-> Ultima actualizacion: 2026-03-30.
+> Ultima actualizacion: 2026-04-01.
 
 ---
 
@@ -40,6 +40,7 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - `ARCH-02` y `ARCH-03` ya están iniciadas, pero no cerradas: el allowlist aún tiene deuda residual fuera del parser compartido.
 - `ARCH-01` ya está iniciada, pero no cerrada: la orquestación principal del bridge sigue en el servicio.
 - `HTTP-01` avanza por la vía JVM/pura del contrato del bridge, pero faltan smoke tests end-to-end contra el servicio vivo.
+- `PERF-01` cerrada: `DataStoreRepository` ya no usa `runBlocking`; lecturas síncronas van por snapshots en memoria y las escrituras pasan por funciones suspendidas desde coroutines de UI/viewmodel.
 - Validación funcional de thinking/benchmark en dispositivo.
 
 ---

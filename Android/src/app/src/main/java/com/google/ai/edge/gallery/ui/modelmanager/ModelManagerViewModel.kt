@@ -59,6 +59,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
@@ -153,6 +155,7 @@ constructor(
   protected val _uiState = MutableStateFlow(createEmptyUiState())
   val uiState = _uiState.asStateFlow()
   private val pendingCleanupCallbacks = mutableMapOf<String, () -> Unit>()
+  private val authTokenWriteMutex = Mutex()
 
   val authService = AuthorizationService(context)
   var curAccessToken: String = ""
@@ -258,12 +261,7 @@ constructor(
       curModelDownloadStatus.remove(model.name)
 
       // Update data store.
-      val importedModels = dataStoreRepository.readImportedModels().toMutableList()
-      val importedModelIndex = importedModels.indexOfFirst { it.fileName == model.name }
-      if (importedModelIndex >= 0) {
-        importedModels.removeAt(importedModelIndex)
-      }
-      dataStoreRepository.saveImportedModels(importedModels = importedModels)
+      viewModelScope.launch { dataStoreRepository.removeImportedModel(fileName = model.name) }
     }
     val newUiState =
       uiState.value.copy(
@@ -446,7 +444,9 @@ constructor(
         newHistory.removeAt(newHistory.size - 1)
       }
       _uiState.update { _uiState.value.copy(textInputHistory = newHistory) }
-      dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+      viewModelScope.launch {
+        dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+      }
     } else {
       promoteTextInputHistoryItem(text)
     }
@@ -459,7 +459,9 @@ constructor(
       newHistory.removeAt(index)
       newHistory.add(0, text)
       _uiState.update { _uiState.value.copy(textInputHistory = newHistory) }
-      dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+      viewModelScope.launch {
+        dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+      }
     }
   }
 
@@ -469,13 +471,15 @@ constructor(
       val newHistory = uiState.value.textInputHistory.toMutableList()
       newHistory.removeAt(index)
       _uiState.update { _uiState.value.copy(textInputHistory = newHistory) }
-      dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+      viewModelScope.launch {
+        dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+      }
     }
   }
 
   fun clearTextInputHistory() {
     _uiState.update { _uiState.value.copy(textInputHistory = mutableListOf()) }
-    dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory)
+    viewModelScope.launch { dataStoreRepository.saveTextInputHistory(_uiState.value.textInputHistory) }
   }
 
   fun readThemeOverride(): Theme {
@@ -483,7 +487,7 @@ constructor(
   }
 
   fun saveThemeOverride(theme: Theme) {
-    dataStoreRepository.saveTheme(theme = theme)
+    viewModelScope.launch { dataStoreRepository.saveTheme(theme = theme) }
   }
 
   fun getModelUrlResponse(model: Model, accessToken: String? = null): Int {
@@ -564,14 +568,7 @@ constructor(
     }
 
     // Add to data store.
-    val importedModels = dataStoreRepository.readImportedModels().toMutableList()
-    val importedModelIndex = importedModels.indexOfFirst { info.fileName == it.fileName }
-    if (importedModelIndex >= 0) {
-      Log.d(TAG, "duplicated imported model found in data store. Removing it first")
-      importedModels.removeAt(importedModelIndex)
-    }
-    importedModels.add(info)
-    dataStoreRepository.saveImportedModels(importedModels = importedModels)
+    viewModelScope.launch { dataStoreRepository.upsertImportedModel(importedModel = info) }
   }
 
   fun getTokenStatusAndData(): TokenStatusAndData {
@@ -662,13 +659,17 @@ constructor(
             } else {
               // Token exchange successful. Store the tokens securely
               Log.d(TAG, "Token exchange successful. Storing tokens...")
-              saveAccessToken(
-                accessToken = tokenResponse.accessToken!!,
-                refreshToken = tokenResponse.refreshToken!!,
-                expiresAt = tokenResponse.accessTokenExpirationTime!!,
-              )
-              curAccessToken = tokenResponse.accessToken!!
-              Log.d(TAG, "Token successfully saved.")
+              viewModelScope.launch {
+                persistAccessToken(
+                  accessToken = tokenResponse.accessToken!!,
+                  refreshToken = tokenResponse.refreshToken!!,
+                  expiresAt = tokenResponse.accessTokenExpirationTime!!,
+                )
+                curAccessToken = tokenResponse.accessToken!!
+                Log.d(TAG, "Token successfully saved.")
+                onTokenRequested(TokenRequestResult(status = TokenRequestResultType.SUCCEEDED))
+              }
+              return@performTokenRequest
             }
           } else if (tokenEx != null) {
             errorMessage = "Token exchange failed: ${tokenEx.message}"
@@ -706,15 +707,28 @@ constructor(
   }
 
   fun saveAccessToken(accessToken: String, refreshToken: String, expiresAt: Long) {
-    dataStoreRepository.saveAccessTokenData(
-      accessToken = accessToken,
-      refreshToken = refreshToken,
-      expiresAt = expiresAt,
-    )
+    viewModelScope.launch { persistAccessToken(accessToken, refreshToken, expiresAt) }
+  }
+
+  private suspend fun persistAccessToken(
+    accessToken: String,
+    refreshToken: String,
+    expiresAt: Long,
+  ) {
+    authTokenWriteMutex.withLock {
+      dataStoreRepository.saveAccessTokenData(
+        accessToken = accessToken,
+        refreshToken = refreshToken,
+        expiresAt = expiresAt,
+      )
+    }
   }
 
   fun clearAccessToken() {
-    dataStoreRepository.clearAccessTokenData()
+    curAccessToken = ""
+    viewModelScope.launch {
+      authTokenWriteMutex.withLock { dataStoreRepository.clearAccessTokenData() }
+    }
   }
 
   private fun processPendingDownloads() {

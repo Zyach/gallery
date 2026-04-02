@@ -29,6 +29,8 @@ Version estimada: 0.3.0-alpha. Madurez: 38%.
 - Capa HOST (termux-*, rish, am/pm/dumpsys): delegar vía `termux-cmd.sh` o `termux-bridge.sh`.
 - No modificar archivos fuera de este repo.
 - No acciones destructivas sin confirmación.
+- No se hacen validaciones on-device en este proyecto. No prometer, planificar ni reportar validación en dispositivo físico/emulador como criterio de cierre, salvo que la documentación viva del repo lo cambie de forma explícita.
+- La validación autoritativa para cambios Android es CI/GitHub Actions; las comprobaciones locales se consideran auxiliares y pueden estar limitadas por el entorno.
 
 ## Workflow (fases)
 1. **Análisis**: leer código, entender estado actual, consultar SITEMAP.

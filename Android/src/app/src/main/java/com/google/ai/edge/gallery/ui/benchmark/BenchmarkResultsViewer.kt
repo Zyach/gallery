@@ -160,7 +160,7 @@ fun BenchmarkResultsViewer(
     ) {
       delay(500)
       showBenchmarkComparisonHelpBottomSheet = true
-      viewModel.dataStoreRepository.setHasSeenBenchmarkComparisonHelp(true)
+      scope.launch { viewModel.dataStoreRepository.setHasSeenBenchmarkComparisonHelp(true) }
     }
   }
 

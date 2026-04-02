@@ -216,7 +216,7 @@ constructor(
     _uiState.update { _uiState.value.copy(completedRunCount = completedRunCount) }
   }
 
-  fun addBenchmarkResult(result: BenchmarkResult): String {
+  suspend fun addBenchmarkResult(result: BenchmarkResult): String {
     val newResults = _uiState.value.results.toMutableList()
     // Add the new result to the beginning of the list.
     val newId = "${Random.nextDouble()}"
@@ -255,19 +255,20 @@ constructor(
   }
 
   fun deleteBenchmarkResult(id: String) {
-    val newResults = _uiState.value.results.toMutableList()
-    val index = newResults.indexOfFirst { it.id == id }
-    if (index != -1) {
-      val deletedResult = newResults.removeAt(index)
-      _uiState.update { _uiState.value.copy(results = newResults) }
-      if (deletedResult.id == uiState.value.baselineResult?.id) {
-        _uiState.update { _uiState.value.copy(baselineResult = null) }
-      }
+    viewModelScope.launch {
+      val newResults = _uiState.value.results.toMutableList()
+      val index = newResults.indexOfFirst { it.id == id }
+      if (index != -1) {
+        val deletedResult = newResults.removeAt(index)
+        _uiState.update { _uiState.value.copy(results = newResults) }
+        if (deletedResult.id == uiState.value.baselineResult?.id) {
+          _uiState.update { _uiState.value.copy(baselineResult = null) }
+        }
 
-      // Update storage.
-      dataStoreRepository.deleteBenchmarkResult(index = index)
-    } else {
-      Log.w(TAG, "Benchmark result with id $id not found.")
+        dataStoreRepository.setBenchmarkResults(newResults.map { it.benchmarkResult })
+      } else {
+        Log.w(TAG, "Benchmark result with id $id not found.")
+      }
     }
   }
 
