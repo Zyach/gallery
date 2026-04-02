@@ -1,6 +1,6 @@
 # backlog — gallery fork
 
-> Ultima actualizacion: 2026-04-01.
+> Ultima actualizacion: 2026-04-02.
 
 ---
 
@@ -33,7 +33,7 @@
 - [ ] `RUNTIME-01` Completar migración runtimeHelper
   - Estado: iniciada con unificación de benchmark y cancelación sobre `LlmModelHelper`.
 - [ ] `HTTP-01` Smoke tests del puente local
-  - Estado: la cobertura JVM del contrato HTTP sigue creciendo, pero faltan pruebas end-to-end del servicio vivo.
+  - Estado: la cobertura JVM del contrato HTTP sigue creciendo, incluyendo adaptación de requests y helpers puros, pero faltan pruebas end-to-end del servicio vivo.
 - [x] `DOC-02` Divergencias deliberadas documentadas
 
 ---
@@ -41,7 +41,7 @@
 ## P2
 
 - [ ] `ARCH-01` Extraer LlmHttpService en componentes
-  - Estado: `ModelResolver` y `ResponseRenderer` ya extraídos; falta mover la orquestación principal del bridge.
+  - Estado: `ModelResolver`, `ResponseRenderer` y DTO/helpers de request ya extraídos; falta mover la orquestación principal del bridge.
 - [ ] `ARCH-02` Unificar allowlist app/servicio
   - Estado: parser compartido del allowlist ya reutilizado por servicio y model manager.
 - [ ] `ARCH-03` Estandarizar kotlinx.serialization
@@ -62,6 +62,8 @@
 - [x] Inicio de `ARCH-02/03` con parser compartido del allowlist basado en `kotlinx.serialization`.
 - [x] Ampliacion de helpers y tests JVM del contrato del bridge HTTP.
 - [x] Cierre de `PERF-01` eliminando `runBlocking` de `DataStoreRepository` y moviendo las escrituras a funciones suspendidas.
+- [x] Mantenimiento de workflows para adelantarse al cutoff de Node.js 20 en GitHub Actions.
+- [x] Nuevo avance de `ARCH-01`/`HTTP-01` con extracción de DTOs y helpers de adaptación de requests del bridge HTTP.
 - [x] Bind loopback explícito (SEC-01)
 - [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
 - [x] Reset conversacional por request para mantener la API HTTP stateless (SEC-03)

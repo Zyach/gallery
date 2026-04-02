@@ -1,6 +1,6 @@
 # ROADMAP — gallery fork
 
-> Ultima actualizacion: 2026-04-01.
+> Ultima actualizacion: 2026-04-02.
 
 ---
 
@@ -27,6 +27,8 @@ Nota: la siguiente capa de cierre para HTTP ya no es hardening básico sino smok
 - [x] Cap retry loop resetSession
 - [x] 15-20 tests JVM (parsing, SSE, model resolution, thinking tags)
 - [x] CI: build automático relevante tras push
+
+Nota: el mantenimiento de workflows ya quedó adelantado frente al cutoff de Node.js 20 en GitHub Actions.
 
 ### Fase C — Arquitectura
 - [ ] Extraer LlmHttpService en componentes (ModelResolver, InferenceGateway, ApiRenderer) — iniciada

@@ -21,13 +21,9 @@ import com.google.ai.edge.gallery.data.ModelAllowlistJson
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import fi.iki.elonen.NanoHTTPD
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.FileWriter
@@ -332,7 +328,12 @@ class LlmHttpService : Service() {
       }
       // Tool-calls short path: if tools present and we are allowed to emit tool_calls
       if (!req.tools.isNullOrEmpty() && req.tool_choice != "none") {
-        val toolCall = synthesizeToolCall(req, prompt)
+        val toolCall =
+          LlmHttpRequestAdapter.synthesizeToolCall(
+            tool = req.tools!!.first(),
+            prompt = prompt,
+            callId = "call_${System.currentTimeMillis()}",
+          )
         val resp = ChatResponse(
           id = "chatcmpl-local",
           created = System.currentTimeMillis() / 1000,
@@ -396,7 +397,7 @@ class LlmHttpService : Service() {
       val resolvedModel = selectModel(req.model) ?: return notFound("model_not_found")
       val resolvedName = resolvedModel.name
       val modelId = resolvedName
-      val prompt = extractText(req.messages ?: req.input)
+      val prompt = LlmHttpRequestAdapter.extractLatestUserText(req.messages ?: req.input)
 
       logPayload("POST /v1/responses prompt", prompt, requestId)
       logEvent(
@@ -410,7 +411,12 @@ class LlmHttpService : Service() {
 
       // Tool-calls short path
       if (!req.tools.isNullOrEmpty() && req.tool_choice != "none") {
-        val toolCall = synthesizeToolCallResponses(req, prompt)
+        val toolCall =
+          LlmHttpRequestAdapter.synthesizeToolCall(
+            tool = req.tools!!.first(),
+            prompt = prompt,
+            callId = "call_${System.currentTimeMillis()}",
+          )
         val respBody = ResponsesResponse(
           id = "resp-local",
           created = System.currentTimeMillis() / 1000,
@@ -461,45 +467,6 @@ class LlmHttpService : Service() {
     // Warm up the model once after service start to reduce first-token latency.
     fun warmUpModel(model: Model) {
       runLlm(model = model, prompt = "Hola", timeoutSeconds = 10, requestId = "warmup", endpoint = "warmup")
-    }
-
-    private fun extractText(msgs: List<InputMsg>?): String {
-      if (msgs == null) return ""
-      var lastUserText: String? = null
-      msgs.forEach { m ->
-        if (m.role.equals("user", ignoreCase = true)) {
-          // Keep only the last text block of the last user message
-          val lastBlock = m.content.lastOrNull { it.type == "text" || it.type == "input_text" }
-          if (lastBlock != null) lastUserText = lastBlock.text
-        }
-      }
-      return lastUserText ?: ""
-    }
-
-    private fun synthesizeToolCall(req: ChatRequest, prompt: String): ToolCall {
-      val tool = req.tools!!.first()
-      val function = tool.function
-      val argsObj = JsonObject(mapOf("query" to JsonPrimitive(prompt)))
-      return ToolCall(
-        id = "call_${System.currentTimeMillis()}",
-        function = ToolCallFunction(
-          name = function.name,
-          arguments = json.encodeToString(argsObj),
-        ),
-      )
-    }
-
-    private fun synthesizeToolCallResponses(req: ResponsesRequest, prompt: String): ToolCall {
-      val tool = req.tools!!.first()
-      val function = tool.function
-      val argsObj = JsonObject(mapOf("query" to JsonPrimitive(prompt)))
-      return ToolCall(
-        id = "call_${System.currentTimeMillis()}",
-        function = ToolCallFunction(
-          name = function.name,
-          arguments = json.encodeToString(argsObj),
-        ),
-      )
     }
 
     private fun runLlm(
@@ -796,81 +763,6 @@ class LlmHttpService : Service() {
   }
 
   @Serializable data class GenReq(val prompt: String)
-
-  @Serializable data class Usage(val prompt_tokens: Int, val completion_tokens: Int)
-
-  // Responses API minimal models
-  @Serializable data class ResponsesRequest(
-    val model: String? = null,
-    val input: List<InputMsg>? = null,
-    val messages: List<InputMsg>? = null,
-    val stream: Boolean? = null,
-    val tools: List<ToolSpec>? = null,
-    val tool_choice: String? = null,
-  )
-  @Serializable data class InputMsg(
-    val role: String,
-    val content: List<InputContent>,
-  )
-  @Serializable data class InputContent(
-    val type: String,
-    val text: String,
-  )
-  @Serializable data class ResponsesResponse(
-    val id: String,
-    val `object`: String = "response",
-    val created: Long,
-    val model: String,
-    val output: List<RespMessage>,
-    val usage: Usage,
-  )
-  @Serializable data class RespMessage(
-    val role: String = "assistant",
-    val content: List<RespContent>,
-    val finish_reason: String = "stop",
-  )
-  @Serializable data class RespContent(
-    val type: String = "text",
-    val text: String,
-  )
-
-  @Serializable data class GenRes(val text: String, val usage: Usage)
-
-  @Serializable data class ChatMessage(
-    val role: String,
-    val content: String,
-    val tool_calls: List<ToolCall>? = null,
-  )
-  @Serializable data class ToolCallFunction(val name: String, val arguments: String)
-  @Serializable data class ToolCall(val id: String, val type: String = "function", val function: ToolCallFunction)
-  @Serializable data class ToolFunctionDef(
-    val name: String,
-    val description: String? = null,
-    val parameters: JsonElement? = null,
-  )
-  @Serializable data class ToolSpec(val type: String = "function", val function: ToolFunctionDef)
-
-  @Serializable data class ChatRequest(
-    val model: String? = null,
-    val messages: List<ChatMessage> = emptyList(),
-    val stream: Boolean? = null,
-    val tools: List<ToolSpec>? = null,
-    val tool_choice: String? = null,
-  )
-
-  @Serializable data class ChatChoice(
-    val index: Int,
-    val message: ChatMessage,
-    val finish_reason: String,
-  )
-
-  @Serializable data class ChatResponse(
-    val id: String,
-    val created: Long,
-    val model: String,
-    val choices: List<ChatChoice>,
-    val usage: Usage,
-  )
 
   companion object {
     const val EXTRA_PORT = "extra_port"
