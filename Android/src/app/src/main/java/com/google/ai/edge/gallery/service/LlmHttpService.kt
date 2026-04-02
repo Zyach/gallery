@@ -257,12 +257,17 @@ class LlmHttpService : Service() {
       val requestId = nextRequestId()
       val payload = HashMap<String, String>()
       session.parseBody(payload)
-      val body = payload["postData"] ?: return badRequest("empty body")
-      val bodyBytes = body.toByteArray(Charsets.UTF_8).size
-      if (bodyBytes > maxBodyBytes) {
+      val parsedBody = LlmHttpBodyParser.parse(payload["postData"], maxBodyBytes)
+      if (payload["postData"] == null) {
+        return badRequest("empty body")
+      }
+      if (parsedBody == null) {
+        val bodyBytes = LlmHttpBodyParser.bodySizeBytes(payload["postData"]!!)
         logEvent("request_rejected id=$requestId endpoint=/generate reason=payload_too_large bytes=$bodyBytes")
         return payloadTooLarge()
       }
+      val body = parsedBody.body
+      val bodyBytes = parsedBody.bodyBytes
 
       logPayload("POST /generate raw", body, requestId)
 
@@ -287,12 +292,17 @@ class LlmHttpService : Service() {
       val requestId = nextRequestId()
       val payload = HashMap<String, String>()
       session.parseBody(payload)
-      val body = payload["postData"] ?: return badRequest("empty body")
-      val bodyBytes = body.toByteArray(Charsets.UTF_8).size
-      if (bodyBytes > maxBodyBytes) {
+      val parsedBody = LlmHttpBodyParser.parse(payload["postData"], maxBodyBytes)
+      if (payload["postData"] == null) {
+        return badRequest("empty body")
+      }
+      if (parsedBody == null) {
+        val bodyBytes = LlmHttpBodyParser.bodySizeBytes(payload["postData"]!!)
         logEvent("request_rejected id=$requestId endpoint=/v1/chat/completions reason=payload_too_large bytes=$bodyBytes")
         return payloadTooLarge()
       }
+      val body = parsedBody.body
+      val bodyBytes = parsedBody.bodyBytes
 
       logPayload("POST /v1/chat/completions raw", body, requestId)
 
@@ -379,12 +389,17 @@ class LlmHttpService : Service() {
       val requestId = nextRequestId()
       val payload = HashMap<String, String>()
       session.parseBody(payload)
-      val body = payload["postData"] ?: return badRequest("empty body")
-      val bodyBytes = body.toByteArray(Charsets.UTF_8).size
-      if (bodyBytes > maxBodyBytes) {
+      val parsedBody = LlmHttpBodyParser.parse(payload["postData"], maxBodyBytes)
+      if (payload["postData"] == null) {
+        return badRequest("empty body")
+      }
+      if (parsedBody == null) {
+        val bodyBytes = LlmHttpBodyParser.bodySizeBytes(payload["postData"]!!)
         logEvent("request_rejected id=$requestId endpoint=/v1/responses reason=payload_too_large bytes=$bodyBytes")
         return payloadTooLarge()
       }
+      val body = parsedBody.body
+      val bodyBytes = parsedBody.bodyBytes
 
       logPayload("POST /v1/responses raw", body, requestId)
 

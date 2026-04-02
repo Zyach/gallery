@@ -28,7 +28,7 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - Runtime helper: benchmark y cancelación empiezan a unificarse bajo `LlmModelHelper`.
 - HTTP service: bindeado a `127.0.0.1`, errores JSON, payload logging opt-in, Bearer token configurable y reset conversacional por request.
 - Allowlist: el parser compartido empieza a unificarse entre app y servicio con `kotlinx.serialization`.
-- HTTP bridge: `ModelResolver`, `ModelFactory`, `ResponseRenderer`, `RouteResolver` y los DTO/helpers de adaptación de requests empiezan a salir de `LlmHttpService` como componentes reutilizables.
+- HTTP bridge: `ModelResolver`, `ModelFactory`, `ResponseRenderer`, `RouteResolver`, `BodyParser` y los DTO/helpers de adaptación de requests empiezan a salir de `LlmHttpService` como componentes reutilizables.
 - CI: build debug + release automático en GitHub Actions sobre cambios relevantes del código.
 - Workflows: majors de `checkout`, `setup-java` y `upload-artifact` ya actualizados para adelantarse al cutoff de Node.js 20; Node 24 se fuerza en CI mientras `setup-android` siga en `v3`.
 - GitHub hygiene del fork: issue forms, Dependabot, release workflow por tag, release notes config, CODEOWNERS, SECURITY/SUPPORT y docs index.
@@ -39,8 +39,8 @@ Fork activo de Google AI Edge Gallery para Android on-device AI. Tres invariante
 - GitHub Actions separa ahora build Android y tests JVM en workflows distintos.
 - `RUNTIME-01` ya está iniciado, pero no completado: aún faltan más flujos y limpieza de contratos alrededor del helper.
 - `ARCH-02` y `ARCH-03` ya están iniciadas, pero no cerradas: el allowlist aún tiene deuda residual fuera del parser compartido.
-- `ARCH-01` ya está iniciada, pero no cerrada: la orquestación principal del bridge sigue en el servicio, aunque siguen saliendo DTOs/helpers puros, resolución de rutas y construcción de modelos fuera de `LlmHttpService`.
-- `HTTP-01` avanza por la vía JVM/pura del contrato del bridge; crece la cobertura de adaptación y routing de requests, pero faltan smoke tests end-to-end contra el servicio vivo.
+- `ARCH-01` ya está iniciada, pero no cerrada: la orquestación principal del bridge sigue en el servicio, aunque siguen saliendo DTOs/helpers puros, resolución de rutas, construcción de modelos y parsing de bodies fuera de `LlmHttpService`.
+- `HTTP-01` avanza por la vía JVM/pura del contrato del bridge; crece la cobertura de adaptación, routing y parsing de requests, pero faltan smoke tests end-to-end contra el servicio vivo.
 - `PERF-01` cerrada: `DataStoreRepository` ya no usa `runBlocking`; lecturas síncronas van por snapshots en memoria y las escrituras pasan por funciones suspendidas desde coroutines de UI/viewmodel.
 - Validación funcional de thinking/benchmark en dispositivo.
 

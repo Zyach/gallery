@@ -33,7 +33,7 @@
 - [ ] `RUNTIME-01` Completar migración runtimeHelper
   - Estado: iniciada con unificación de benchmark y cancelación sobre `LlmModelHelper`.
 - [ ] `HTTP-01` Smoke tests del puente local
-  - Estado: la cobertura JVM del contrato HTTP sigue creciendo, incluyendo adaptación y routing de requests, pero faltan pruebas end-to-end del servicio vivo.
+  - Estado: la cobertura JVM del contrato HTTP sigue creciendo, incluyendo adaptación, routing y parsing de requests, pero faltan pruebas end-to-end del servicio vivo.
 - [x] `DOC-02` Divergencias deliberadas documentadas
 
 ---
@@ -41,7 +41,7 @@
 ## P2
 
 - [ ] `ARCH-01` Extraer LlmHttpService en componentes
-  - Estado: `ModelResolver`, `ModelFactory`, `ResponseRenderer`, `RouteResolver` y DTO/helpers de request ya extraídos; falta mover la orquestación principal del bridge.
+  - Estado: `ModelResolver`, `ModelFactory`, `ResponseRenderer`, `RouteResolver`, `BodyParser` y DTO/helpers de request ya extraídos; falta mover la orquestación principal del bridge.
 - [ ] `ARCH-02` Unificar allowlist app/servicio
   - Estado: parser compartido del allowlist ya reutilizado por servicio y model manager.
 - [ ] `ARCH-03` Estandarizar kotlinx.serialization
@@ -66,6 +66,7 @@
 - [x] Nuevo avance de `ARCH-01`/`HTTP-01` con extracción de DTOs y helpers de adaptación de requests del bridge HTTP.
 - [x] Nuevo avance de `ARCH-01`/`HTTP-01` con extracción del resolvedor puro de rutas del bridge HTTP.
 - [x] Nuevo avance de `ARCH-01` con extracción de la construcción/override de modelos del bridge HTTP.
+- [x] Nuevo avance de `ARCH-01`/`HTTP-01` con extracción del parsing compartido de bodies POST del bridge HTTP.
 - [x] Bind loopback explícito (SEC-01)
 - [x] Auth Bearer opcional-configurable en bridge HTTP (SEC-02)
 - [x] Reset conversacional por request para mantener la API HTTP stateless (SEC-03)
