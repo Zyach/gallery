@@ -1,40 +1,32 @@
 # backlog — gallery fork
 
-> Ultima actualizacion: 2026-04-02.
+> Ultima actualizacion: 2026-04-03.
 
-## Prioridad actual
+## P1 — Próxima iteración
 
-### P1
+- `ARCH-01` Extraer handlers HTTP y logging de `LlmHttpService`
+- `RUNTIME-01` Completar migración runtime helper en flujos pendientes
+- `SYNC-01` Evaluar adopción de Agent Chat / Skills de upstream
 
-- `ARCH-01` Seguir extrayendo `LlmHttpService`
-  - Estado: SSE rendering y orquestacion de inference extraidos. Quedan handlers HTTP individuales y logging.
-- `HTTP-01` Reforzar smoke tests del bridge local
-  - Estado: cobertura JVM amplia y smoke E2E on-device basica completada; falta una capa mas sistematica del servicio vivo.
-- `RUNTIME-01` Completar migracion runtime helper
-  - Estado: iniciado; benchmark y cancelacion ya avanzaron.
+## P2 — Después
 
-### P2
+- `STREAM-01` SSE streaming real token-by-token
+- `BUILD-02` Release signing propio + minify
+- `THINK-02` Migrar de `<think>` tag parsing a `message.channels["thought"]` nativo
 
-- `ARCH-02` Cerrar unificacion de allowlist app/servicio
-- `ARCH-03` Cerrar estandarizacion de `kotlinx.serialization`
-- `STREAM-01` Implementar SSE real token-by-token
-- `BUILD-02` Signing propio + minify
+## Completado
 
-## Completado recientemente
+- Bridge HTTP: loopback, auth, stateless, JSON errors, payload logging opt-in
+- Extracción: InferenceGateway, ResponseRenderer, BodyParser, RouteResolver, ModelResolver, ModelFactory, RequestAdapter, BridgeUtils, ApiModels
+- DataStoreRepository sin `runBlocking`
+- Error handling: single-turn visible, resetSession con max retries
+- 65 tests JVM (14 archivos)
+- CI: tests + lint + debug/release + artifacts + Node.js 24
+- Thinking mode E2E con `<think>` tag parsing
+- Documentación consolidada
 
-- inference orchestration extraida a `LlmHttpInferenceGateway` (latch/timeout/cancel puro y testeable)
-- 7 tests JVM para inference gateway (success, accumulation, error, exception, cancel, ttfb, totalMs)
-- SSE rendering extraido a `LlmHttpResponseRenderer` (~120 LOC menos en servicio)
-- tests JVM para SSE text/toolcall/empty payloads
-- `PERF-01` Eliminado `runBlocking` de `DataStoreRepository`
-- mitigacion del cutoff de Node.js 20 en GitHub Actions
-- extraccion incremental del bridge HTTP en helpers puros
-- validacion E2E on-device del bridge HTTP con auth y `generate`
+## No reabrir
 
-## No reabrir sin motivo
-
-- bridge HTTP loopback-only
-- auth bearer del bridge
-- reset stateless por request
-- rechazo de modelos desconocidos con `404`
+- Bridge HTTP loopback-only, auth bearer, stateless, 404 para modelos desconocidos
 - Tiny Garden preservado
+- Chat history persistente fuera de alcance

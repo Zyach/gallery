@@ -1,70 +1,45 @@
 # STATE — gallery fork
 
-> Ultima actualizacion: 2026-04-02.
+> Ultima actualizacion: 2026-04-03.
 
 ## Resumen
 
-Fork activo de Google AI Edge Gallery para Android on-device AI.
+Fork de [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery) para Android on-device AI. Añade un bridge HTTP local para Every Code y mejoras de calidad que upstream no tiene.
 
-- Version estimada: `0.3.0-alpha`
-- Madurez estimada: `38%`
-- Enfoque actual: convergencia incremental con upstream sin romper el bridge HTTP local ni Tiny Garden
+**Version: 0.4.0-alpha** · **65 tests JVM** · **CI verde**
 
-## Invariantes del fork
+## Qué tiene el fork que upstream no tiene
 
-1. Bridge HTTP local en loopback (`127.0.0.1`) para Every Code.
-2. Chat history persistente fuera de alcance.
-3. Tiny Garden preservado.
+- **Bridge HTTP local** — servicio completo en `127.0.0.1` con auth, SSE, tool calls. 9 componentes extraídos, testeable.
+- **65 tests JVM** — upstream tiene cero tests.
+- **CI real** — tests + lint + debug + release + artifacts. Upstream solo hace `assembleRelease`.
+- **DataStoreRepository async** — eliminado `runBlocking` (upstream tiene TODO abierto `b/423700720`).
+- **Error handling corregido** — single-turn muestra errores (upstream los descarta), resetSession con max retries (upstream es infinito).
+
+## Qué tiene upstream que el fork no tiene
+
+- **Agent Chat + Skills** — sistema completo de skills importables, chat con herramientas, SkillManager.
+- **Thinking via SDK nativo** — `message.channels["thought"]` vs nuestro parsing de `<think>` tags.
+- **FCM push notifications** — `FcmMessagingService`.
+- **Promo/onboarding screens** — `PromoScreenGm4`, `PromoBannerGm4`.
+- **UI avanzada para agents** — `CollapsableProgressPanel`, `LogsViewer`, `MessageBodyWebview`.
 
 ## Estado validado
 
-- CI verde en `main` para:
-  - `Android APK`
-  - `Android JVM Tests`
-- Validacion E2E on-device ya comprobada para el bridge HTTP:
-  - `GET /ping` -> `200`
-  - `GET /v1/models` con bearer token -> `200`
-  - `POST /generate` con bearer token -> `200`
-- Workflows adelantados frente al cutoff de Node.js 20:
-  - `checkout`, `setup-java` y `upload-artifact` actualizados
-  - `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` activo
-  - `android-actions/setup-android@v3` sigue siendo la unica advertencia no bloqueante
-
-## Arquitectura actual
-
-- App Compose/Hilt con `LlmModelHelper` como contrato runtime.
-- El bridge HTTP sigue en `LlmHttpService`, pero la extraccion ya avanza por componentes puros:
-  - `LlmHttpApiModels`
-  - `LlmHttpRequestAdapter`
-  - `LlmHttpModelResolver`
-  - `LlmHttpModelFactory`
-  - `LlmHttpResponseRenderer`
-  - `LlmHttpRouteResolver`
-  - `LlmHttpBodyParser`
-- Allowlist compartido con `kotlinx.serialization`.
-- `DataStoreRepository` ya no depende de `runBlocking`.
+- CI verde: `Android APK` + `Android JVM Tests`.
+- E2E on-device: `/ping`, `/v1/models`, `/generate` con bearer token.
+- Node.js 24 adelantado en workflows.
 
 ## Gaps activos
 
-- `ARCH-01`: la orquestacion principal del bridge sigue en `LlmHttpService`.
-- `HTTP-01`: ya hay cobertura JVM y una smoke validacion on-device basica, pero falta cerrar una capa mas formal de smoke tests del servicio vivo.
-- `RUNTIME-01`: la convergencia del helper runtime sigue incompleta.
-- `ARCH-02` y `ARCH-03`: la unificacion del allowlist esta avanzada, pero no cerrada.
-- `STREAM-01`: SSE real token-by-token sigue pendiente.
-- `BUILD-02`: signing propio y minify siguen pendientes.
+| ID | Descripción |
+|---|---|
+| ARCH-01 | Quedan handlers HTTP individuales y logging en `LlmHttpService` |
+| RUNTIME-01 | Migración runtime helper incompleta |
+| STREAM-01 | SSE streaming real token-by-token pendiente |
+| BUILD-02 | Release signing propio + minify pendientes |
+| SYNC-01 | Agent Chat, Skills y thinking nativo de upstream no adoptados |
 
-## Politica de validacion
+## Validación
 
-- GitHub Actions es el primer gate remoto.
-- Cuando sea viable, los cambios Android se validan tambien con este ciclo E2E on-device:
-  - `commit y push`
-  - `build verde en GitHub`
-  - `descarga del artefacto`
-  - `instalacion via Termux API/pm`
-  - `verificacion funcional y de rendimiento con logcat dirigido via Shizuku`
-
-## Riesgos activos
-
-- El bridge HTTP debe seguir siendo local-only, autenticado y stateless por request.
-- Las iteraciones de `DataStoreRepository` siguen siendo sensibles a carreras de arranque y de persistencia.
-- La validacion local de Gradle en este entorno sigue siendo poco fiable por AAPT2/SDK; la referencia principal sigue siendo CI.
+GitHub Actions es el gate primario. Ciclo E2E on-device cuando el cambio lo requiera.

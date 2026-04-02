@@ -1,31 +1,31 @@
-# FORK_DIVERGENCES — gallery
+# Fork Divergences
 
-> Ultima actualizacion: 2026-04-02.
+> Diferencias deliberadas respecto a [upstream](https://github.com/google-ai-edge/gallery).
 
-## Divergencias activas y deliberadas
+## Fork añade (upstream no tiene)
 
-### 1. Bridge HTTP local
+| Capacidad | Archivos clave |
+|---|---|
+| Bridge HTTP local en `127.0.0.1` con auth, SSE, tool calls | `service/LlmHttpService.kt` + 8 helpers |
+| 65 tests JVM | `src/test/` (14 archivos) |
+| CI con tests, lint, artifacts | `.github/workflows/` |
+| `DataStoreRepository` async (sin `runBlocking`) | `data/DataStoreRepository.kt` |
+| Error visible en single-turn | `LlmSingleTurnViewModel.kt` |
+| Reset session con max retries | `LlmChatViewModel.kt` |
+| Thinking via `<think>` tag parsing | `LlmChatModelHelper.kt` |
 
-El fork mantiene un bridge HTTP local para Every Code sobre `127.0.0.1`.
+## Fork no tiene (upstream sí)
 
-Archivos clave:
+| Capacidad | Notas |
+|---|---|
+| Agent Chat + Skills | `customtasks/agentchat/`, `SkillAllowlist`, `SkillsSerializer` |
+| Thinking via SDK nativo | `message.channels["thought"]` — más correcto que nuestro tag parsing |
+| FCM push notifications | `FcmMessagingService.kt` |
+| Promo/onboarding UI | `PromoScreenGm4`, `PromoBannerGm4` |
+| Agent progress UI | `CollapsableProgressPanel`, `LogsViewer`, `MessageBodyWebview` |
 
-- `service/LlmHttpService.kt`
-- `data/LlmHttpPrefs.kt`
-- superficies de settings relacionadas
+## Decisiones de diseño
 
-### 2. Sin chat history persistente
-
-No es un objetivo del fork reintroducir chat history persistente.
-
-### 3. Thinking mode mas completo
-
-El fork mantiene parsing de tags `<think>` y la cadena de UI asociada, porque upstream no la cierra completamente en el mismo grado.
-
-### 4. Benchmark expuesto en el producto
-
-El fork ya conecta benchmark en navegacion y pantallas relacionadas.
-
-### 5. Documentacion operativa propia
-
-El fork mantiene `docs/` como fuente viva para estado, roadmap, backlog y estrategia de convergencia.
+- **Chat history persistente** no se reintroduce (upstream tampoco lo tiene).
+- **Tiny Garden** se preserva.
+- **Bridge HTTP** es la razón principal del fork.
