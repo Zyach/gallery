@@ -24,6 +24,7 @@ plugins {
   alias(libs.plugins.protobuf)
   alias(libs.plugins.hilt.application)
   alias(libs.plugins.oss.licenses)
+  alias(libs.plugins.ksp)
   kotlin("kapt")
 }
 
@@ -35,9 +36,8 @@ android {
     applicationId = "com.google.aiedge.gallery"
     minSdk = 31
     targetSdk = 35
-    versionCode = 17
-    versionName = "1.0.9"
-    buildConfigField("String", "PERF_PROFILE", "\"balanced\"")
+    versionCode = 20
+    versionName = "1.0.11"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
@@ -106,8 +106,11 @@ dependencies {
   implementation(libs.play.services.oss.licenses)
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.analytics)
+  implementation(libs.firebase.messaging)
   implementation(libs.androidx.exifinterface)
+  implementation(libs.moshi.kotlin)
   kapt(libs.hilt.android.compiler)
+  ksp(libs.moshi.kotlin.codegen)
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
