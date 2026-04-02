@@ -18,7 +18,10 @@ package com.google.ai.edge.gallery.ui.common.chat
 
 import android.graphics.Bitmap
 import android.util.Log
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import com.google.ai.edge.gallery.common.Classification
 import com.google.ai.edge.gallery.data.Model
@@ -40,6 +43,8 @@ enum class ChatMessageType {
   BENCHMARK_RESULT,
   BENCHMARK_LLM_RESULT,
   PROMPT_TEMPLATES,
+  WEBVIEW,
+  COLLAPSABLE_PROGRESS_PANEL,
   THINKING,
 }
 
@@ -55,15 +60,30 @@ open class ChatMessage(
   open val side: ChatSide,
   open val latencyMs: Float = -1f,
   open val accelerator: String = "",
+  open val hideSenderLabel: Boolean = false,
+  open val disableBubbleShape: Boolean = false,
 ) {
   open fun clone(): ChatMessage {
-    return ChatMessage(type = type, side = side, latencyMs = latencyMs)
+    return ChatMessage(
+      type = type,
+      side = side,
+      latencyMs = latencyMs,
+      accelerator = accelerator,
+      hideSenderLabel = hideSenderLabel,
+      disableBubbleShape = disableBubbleShape,
+    )
   }
 }
 
 /** Chat message for showing loading status. */
-class ChatMessageLoading(override val accelerator: String = "") :
-  ChatMessage(type = ChatMessageType.LOADING, side = ChatSide.AGENT, accelerator = accelerator)
+class ChatMessageLoading(
+  var extraProgressLabel: String = "",
+  override val accelerator: String = "",
+) : ChatMessage(type = ChatMessageType.LOADING, side = ChatSide.AGENT, accelerator = accelerator) {
+  override fun clone(): ChatMessageLoading {
+    return ChatMessageLoading(extraProgressLabel = extraProgressLabel, accelerator = accelerator)
+  }
+}
 
 /** Chat message for info (help). */
 class ChatMessageInfo(val content: String) :
@@ -95,6 +115,7 @@ open class ChatMessageText(
   // Benchmark result for LLM response.
   var llmBenchmarkResult: ChatMessageBenchmarkLlmResult? = null,
   override val accelerator: String = "",
+  override val hideSenderLabel: Boolean = false,
   var data: Any? = null,
 ) :
   ChatMessage(
@@ -102,6 +123,7 @@ open class ChatMessageText(
     side = side,
     latencyMs = latencyMs,
     accelerator = accelerator,
+    hideSenderLabel = hideSenderLabel,
   ) {
   override fun clone(): ChatMessageText {
     return ChatMessageText(
@@ -111,6 +133,7 @@ open class ChatMessageText(
       accelerator = accelerator,
       isMarkdown = isMarkdown,
       llmBenchmarkResult = llmBenchmarkResult,
+      hideSenderLabel = hideSenderLabel,
       data = data,
     )
   }
@@ -120,15 +143,27 @@ open class ChatMessageText(
 class ChatMessageImage(
   val bitmaps: List<Bitmap>,
   val imageBitMaps: List<ImageBitmap>,
+  val maxSize: Int = 200,
   override val side: ChatSide,
   override val latencyMs: Float = 0f,
-) : ChatMessage(type = ChatMessageType.IMAGE, side = side, latencyMs = latencyMs) {
+  override val accelerator: String = "",
+  override val hideSenderLabel: Boolean = false,
+) :
+  ChatMessage(
+    type = ChatMessageType.IMAGE,
+    side = side,
+    latencyMs = latencyMs,
+    accelerator = accelerator,
+    hideSenderLabel = hideSenderLabel,
+  ) {
   override fun clone(): ChatMessageImage {
     return ChatMessageImage(
       bitmaps = bitmaps.toList(),
       imageBitMaps = imageBitMaps.toList(),
       side = side,
       latencyMs = latencyMs,
+      accelerator = accelerator,
+      hideSenderLabel = hideSenderLabel,
     )
   }
 }
@@ -292,18 +327,95 @@ class ChatMessagePromptTemplates(
   val showMakeYourOwn: Boolean = true,
 ) : ChatMessage(type = ChatMessageType.PROMPT_TEMPLATES, side = ChatSide.SYSTEM)
 
+/** Chat message for showing a WebView. */
+class ChatMessageWebView(
+  val url: String,
+  val iframe: Boolean,
+  val aspectRatio: Float,
+  override val side: ChatSide = ChatSide.AGENT,
+  override val hideSenderLabel: Boolean = false,
+) :
+  ChatMessage(
+    type = ChatMessageType.WEBVIEW,
+    side = side,
+    hideSenderLabel = hideSenderLabel,
+    disableBubbleShape = true,
+  ) {
+  override fun clone(): ChatMessageWebView {
+    return ChatMessageWebView(
+      url = url,
+      iframe = iframe,
+      aspectRatio = aspectRatio,
+      side = side,
+      hideSenderLabel = hideSenderLabel,
+    )
+  }
+}
+
+data class ProgressPanelItem(val title: String, val description: String)
+
+enum class LogMessageLevel {
+  Info,
+  Warning,
+  Error,
+}
+
+data class LogMessage(
+  val level: LogMessageLevel = LogMessageLevel.Info,
+  val source: String = "",
+  val lineNumber: Int = -1,
+  val message: String = "",
+)
+
+/** Chat message for showing a collapsable progress panel. */
+class ChatMessageCollapsableProgressPanel(
+  val title: String,
+  val inProgress: Boolean,
+  override val accelerator: String,
+  val doneIcon: ImageVector = Icons.Rounded.Check,
+  val items: List<ProgressPanelItem> = listOf(),
+  val logMessages: List<LogMessage> = listOf(),
+  val customData: Any? = null,
+) :
+  ChatMessage(
+    type = ChatMessageType.COLLAPSABLE_PROGRESS_PANEL,
+    side = ChatSide.AGENT,
+    accelerator = accelerator,
+  ) {
+  override fun clone(): ChatMessageCollapsableProgressPanel {
+    return ChatMessageCollapsableProgressPanel(
+      title = title,
+      inProgress = inProgress,
+      accelerator = accelerator,
+      doneIcon = doneIcon,
+      items = items.toList(),
+      logMessages = logMessages.toList(),
+      customData = customData,
+    )
+  }
+}
+
 /** Chat message for showcasing a thought process. */
 class ChatMessageThinking(
   val content: String,
   val inProgress: Boolean,
   override val side: ChatSide = ChatSide.AGENT,
+  override val hideSenderLabel: Boolean = false,
   override val accelerator: String = "",
-) : ChatMessage(type = ChatMessageType.THINKING, side = side, accelerator = accelerator) {
+) :
+  ChatMessage(
+    type = ChatMessageType.THINKING,
+    side = side,
+    hideSenderLabel = hideSenderLabel,
+    disableBubbleShape = true,
+    accelerator = accelerator,
+  ) {
   override fun clone(): ChatMessageThinking {
     return ChatMessageThinking(
       content = content,
       inProgress = inProgress,
       side = side,
+      hideSenderLabel = hideSenderLabel,
       accelerator = accelerator,
     )
   }

@@ -38,10 +38,10 @@ data class CustomTaskData(
   val bottomPadding: Dp = 0.dp,
   val setAppBarControlsDisabled: (Boolean) -> Unit = {},
   val setTopBarVisible: (Boolean) -> Unit = {},
+  val setCustomNavigateUpCallback: ((() -> Unit)?) -> Unit = {},
 )
 
 data class CustomTaskDataForBuiltinTask(
   val modelManagerViewModel: ModelManagerViewModel,
   val onNavUp: () -> Unit,
-  val onOpenBenchmarkScreen: (String) -> Unit = {},
 )

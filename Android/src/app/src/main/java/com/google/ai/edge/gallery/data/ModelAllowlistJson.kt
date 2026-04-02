@@ -1,13 +1,9 @@
 package com.google.ai.edge.gallery.data
 
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
+import com.google.gson.Gson
 
 object ModelAllowlistJson {
-  private val parser = Json {
-    ignoreUnknownKeys = true
-    explicitNulls = false
-  }
+  private val gson = Gson()
 
-  fun decode(content: String): ModelAllowlist = parser.decodeFromString(content)
+  fun decode(content: String): ModelAllowlist = gson.fromJson(content, ModelAllowlist::class.java)
 }

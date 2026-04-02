@@ -16,7 +16,7 @@
 
 package com.google.ai.edge.gallery.ui.llmsingleturn
 
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 
 // import androidx.compose.ui.tooling.preview.Preview
 // import com.google.ai.edge.gallery.ui.preview.PreviewLlmSingleTurnViewModel
@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.core.os.bundleOf
+import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.firebaseAnalytics
@@ -69,7 +70,6 @@ private const val TAG = "AGLlmSingleTurnScreen"
 fun LlmSingleTurnScreen(
   modelManagerViewModel: ModelManagerViewModel,
   navigateUp: () -> Unit,
-  onOpenBenchmarkScreen: (String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: LlmSingleTurnViewModel = hiltViewModel(),
 ) {
@@ -133,21 +133,17 @@ fun LlmSingleTurnScreen(
         modelManagerViewModel = modelManagerViewModel,
         inProgress = uiState.inProgress,
         modelPreparing = uiState.preparing,
-        onBenchmarkScreenClicked = { model -> onOpenBenchmarkScreen(model.name) },
         onConfigChanged = { _, _ -> },
         onBackClicked = { handleNavigateUp() },
         onModelSelected = { prevModel, newSelectedModel ->
           scope.launch(Dispatchers.Default) {
             if (prevModel.name != newSelectedModel.name) {
-              modelManagerViewModel.cleanupModel(
-                context = context,
-                task = task,
-                model = prevModel,
-                onDone = { modelManagerViewModel.selectModel(model = newSelectedModel) },
-              )
-            } else {
-              modelManagerViewModel.selectModel(model = newSelectedModel)
+              // Clean up prev model.
+              modelManagerViewModel.cleanupModel(context = context, task = task, model = prevModel)
             }
+
+            // Update selected model.
+            modelManagerViewModel.selectModel(model = newSelectedModel)
           }
         },
       )
@@ -197,7 +193,7 @@ fun LlmSingleTurnScreen(
                 viewModel.generateResponse(task = task, model = selectedModel, input = fullPrompt)
 
                 firebaseAnalytics?.logEvent(
-                  "generate_action",
+                  GalleryEvent.GENERATE_ACTION.id,
                   bundleOf("capability_name" to task.id, "model_id" to selectedModel.name),
                 )
               },

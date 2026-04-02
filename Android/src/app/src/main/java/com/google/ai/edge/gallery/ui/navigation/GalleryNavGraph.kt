@@ -16,9 +16,7 @@
 
 package com.google.ai.edge.gallery.ui.navigation
 
-import android.net.Uri
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-
+import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -27,15 +25,21 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.EaseOutExpo
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.Scaffold
@@ -56,7 +60,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.core.os.bundleOf
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -65,6 +69,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
@@ -76,17 +81,20 @@ import com.google.ai.edge.gallery.ui.common.ErrorDialog
 import com.google.ai.edge.gallery.ui.common.ModelPageAppBar
 import com.google.ai.edge.gallery.ui.common.chat.ModelDownloadStatusInfoPanel
 import com.google.ai.edge.gallery.ui.home.HomeScreen
+import com.google.ai.edge.gallery.ui.modelmanager.GlobalModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManager
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "AGGalleryNavGraph"
 private const val ROUTE_HOMESCREEN = "homepage"
 private const val ROUTE_MODEL_LIST = "model_list"
 private const val ROUTE_MODEL = "route_model"
-private const val ROUTE_BENCHMARK = "route_benchmark"
+private const val ROUTE_BENCHMARK = "benchmark"
+private const val ROUTE_MODEL_MANAGER = "model_manager"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -120,6 +128,20 @@ private fun AnimatedContentTransitionScope<*>.slideExit(): ExitTransition {
   )
 }
 
+private fun AnimatedContentTransitionScope<*>.slideUpEnter(): EnterTransition {
+  return slideIntoContainer(
+    animationSpec = enterTween(),
+    towards = AnimatedContentTransitionScope.SlideDirection.Up,
+  )
+}
+
+private fun AnimatedContentTransitionScope<*>.slideDownExit(): ExitTransition {
+  return slideOutOfContainer(
+    animationSpec = exitTween(),
+    towards = AnimatedContentTransitionScope.SlideDirection.Down,
+  )
+}
+
 /** Navigation routes. */
 @Composable
 fun GalleryNavHost(
@@ -132,6 +154,7 @@ fun GalleryNavHost(
   var pickedTask by remember { mutableStateOf<Task?>(null) }
   var enableHomeScreenAnimation by remember { mutableStateOf(true) }
   var enableModelListAnimation by remember { mutableStateOf(true) }
+  var lastNavigatedModelName = remember { "" }
 
   // Track whether app is in foreground.
   DisposableEffect(lifecycleOwner) {
@@ -158,7 +181,6 @@ fun GalleryNavHost(
 
   NavHost(
     navController = navController,
-    // Default to open home screen.
     startDestination = ROUTE_HOMESCREEN,
     enterTransition = { EnterTransition.None },
     exitTransition = { ExitTransition.None },
@@ -173,8 +195,12 @@ fun GalleryNavHost(
           pickedTask = task
           enableModelListAnimation = true
           navController.navigate(ROUTE_MODEL_LIST)
-          firebaseAnalytics?.logEvent("capability_select", bundleOf("capability_name" to task.id))
+          firebaseAnalytics?.logEvent(
+            GalleryEvent.CAPABILITY_SELECT.id,
+            Bundle().apply { putString("capability_name", task.id) },
+          )
         },
+        onModelsClicked = { navController.navigate(ROUTE_MODEL_MANAGER) },
       )
     }
 
@@ -225,8 +251,14 @@ fun GalleryNavHost(
     ) { backStackEntry ->
       val modelName = backStackEntry.arguments?.getString("modelName") ?: ""
       val taskId = backStackEntry.arguments?.getString("taskId") ?: ""
-      modelManagerViewModel.getModelByName(name = modelName)?.let { model ->
-        LaunchedEffect(Unit) { modelManagerViewModel.selectModel(model) }
+      val scope = rememberCoroutineScope()
+      val context = LocalContext.current
+
+      modelManagerViewModel.getModelByName(name = modelName)?.let { initialModel ->
+        if (lastNavigatedModelName != modelName) {
+          modelManagerViewModel.selectModel(initialModel)
+          lastNavigatedModelName = modelName
+        }
 
         val customTask = modelManagerViewModel.getCustomTaskByTaskId(id = taskId)
         if (customTask != null) {
@@ -237,25 +269,43 @@ fun GalleryNavHost(
                   modelManagerViewModel = modelManagerViewModel,
                   onNavUp = {
                     enableModelListAnimation = false
+                    lastNavigatedModelName = ""
                     navController.navigateUp()
-                  },
-                  onOpenBenchmarkScreen = { modelName ->
-                    navController.navigate("$ROUTE_BENCHMARK/${Uri.encode(modelName)}")
                   },
                 )
             )
           } else {
             var disableAppBarControls by remember { mutableStateOf(false) }
             var hideTopBar by remember { mutableStateOf(false) }
+            var customNavigateUpCallback by remember { mutableStateOf<(() -> Unit)?>(null) }
             CustomTaskScreen(
               task = customTask.task,
               modelManagerViewModel = modelManagerViewModel,
               onNavigateUp = {
-                enableModelListAnimation = false
-                navController.navigateUp()
+                if (customNavigateUpCallback != null) {
+                  customNavigateUpCallback?.invoke()
+                } else {
+                  enableModelListAnimation = false
+                  lastNavigatedModelName = ""
+                  navController.navigateUp()
+
+                  // clean up all models.
+                  for (curModel in customTask.task.models) {
+                    val instanceToCleanUp = curModel.instance
+                    scope.launch(Dispatchers.Default) {
+                      modelManagerViewModel.cleanupModel(
+                        context = context,
+                        task = customTask.task,
+                        model = curModel,
+                        instanceToCleanUp = instanceToCleanUp,
+                      )
+                    }
+                  }
+                }
               },
               disableAppBarControls = disableAppBarControls,
               hideTopBar = hideTopBar,
+              useThemeColor = customTask.task.useThemeColor,
             ) { bottomPadding ->
               customTask.MainScreen(
                 data =
@@ -264,6 +314,7 @@ fun GalleryNavHost(
                     bottomPadding = bottomPadding,
                     setAppBarControlsDisabled = { disableAppBarControls = it },
                     setTopBarVisible = { hideTopBar = !it },
+                    setCustomNavigateUpCallback = { customNavigateUpCallback = it },
                   )
               )
             }
@@ -272,6 +323,50 @@ fun GalleryNavHost(
       }
     }
 
+    // Global model manager page.
+    composable(
+      route = ROUTE_MODEL_MANAGER,
+      enterTransition = {
+        if (
+          initialState.destination.route?.startsWith(ROUTE_BENCHMARK) == true ||
+            initialState.destination.route?.startsWith(ROUTE_MODEL) == true
+        ) {
+          null
+        } else {
+          slideUpEnter()
+        }
+      },
+      exitTransition = {
+        if (
+          targetState.destination.route?.startsWith(ROUTE_BENCHMARK) == true ||
+            targetState.destination.route?.startsWith(ROUTE_MODEL) == true
+        ) {
+          null
+        } else {
+          slideDownExit()
+        }
+      },
+    ) { backStackEntry ->
+      GlobalModelManager(
+        viewModel = modelManagerViewModel,
+        navigateUp = {
+          enableHomeScreenAnimation = false
+          navController.navigateUp()
+        },
+        onModelSelected = { task, model ->
+          navController.navigate("$ROUTE_MODEL/${task.id}/${model.name}")
+        },
+        onBenchmarkClicked = { model ->
+          firebaseAnalytics?.logEvent(
+            GalleryEvent.CAPABILITY_SELECT.id,
+            Bundle().apply { putString("capability_name", "benchmark_${model.name}") },
+          )
+          navController.navigate("$ROUTE_BENCHMARK/${model.name}")
+        },
+      )
+    }
+
+    // Benchmark creation page.
     composable(
       route = "$ROUTE_BENCHMARK/{modelName}",
       arguments = listOf(navArgument("modelName") { type = NavType.StringType }),
@@ -279,11 +374,15 @@ fun GalleryNavHost(
       exitTransition = { slideExit() },
     ) { backStackEntry ->
       val modelName = backStackEntry.arguments?.getString("modelName") ?: ""
+
       modelManagerViewModel.getModelByName(name = modelName)?.let { model ->
         BenchmarkScreen(
           initialModel = model,
           modelManagerViewModel = modelManagerViewModel,
-          onBackClicked = { navController.navigateUp() },
+          onBackClicked = {
+            enableModelListAnimation = false
+            navController.navigateUp()
+          },
         )
       }
     }
@@ -305,6 +404,8 @@ fun GalleryNavHost(
       } else {
         Log.e(TAG, "Malformed deep link URI received: $data")
       }
+    } else if (data.toString() == "com.google.ai.edge.gallery://global_model_manager") {
+      navController.navigate(ROUTE_MODEL_MANAGER)
     }
   }
 }
@@ -315,6 +416,7 @@ private fun CustomTaskScreen(
   modelManagerViewModel: ModelManagerViewModel,
   disableAppBarControls: Boolean,
   hideTopBar: Boolean,
+  useThemeColor: Boolean,
   onNavigateUp: () -> Unit,
   content: @Composable (bottomPadding: Dp) -> Unit,
 ) {
@@ -329,13 +431,6 @@ private fun CustomTaskScreen(
   val handleNavigateUp = {
     navigatingUp = true
     onNavigateUp()
-
-    // clean up all models.
-    scope.launch(Dispatchers.Default) {
-      for (model in task.models) {
-        modelManagerViewModel.cleanupModel(context = context, task = task, model = model)
-      }
-    }
   }
 
   // Handle system's edge swipe.
@@ -374,23 +469,28 @@ private fun CustomTaskScreen(
           inProgress = disableAppBarControls,
           modelPreparing = disableAppBarControls,
           canShowResetSessionButton = false,
+          useThemeColor = useThemeColor,
           modifier =
             Modifier.onGloballyPositioned { coordinates -> appBarHeight = coordinates.size.height },
           hideModelSelector = task.models.size <= 1,
           onConfigChanged = { _, _ -> },
           onBackClicked = { handleNavigateUp() },
           onModelSelected = { prevModel, newSelectedModel ->
+            val instanceToCleanUp = prevModel.instance
             scope.launch(Dispatchers.Default) {
+              // Clean up prev model.
               if (prevModel.name != newSelectedModel.name) {
                 modelManagerViewModel.cleanupModel(
                   context = context,
                   task = task,
                   model = prevModel,
-                  onDone = { modelManagerViewModel.selectModel(model = newSelectedModel) },
+                  instanceToCleanUp = instanceToCleanUp,
                 )
-              } else {
-                modelManagerViewModel.selectModel(model = newSelectedModel)
               }
+
+              // Update selected model.
+              Log.d(TAG, "from model picker. new: ${newSelectedModel.name}")
+              modelManagerViewModel.selectModel(model = newSelectedModel)
             }
           },
         )
@@ -410,14 +510,14 @@ private fun CustomTaskScreen(
     val animatedTopPadding by
       animateDpAsState(
         targetValue = targetPaddingDp,
-        animationSpec = tween(durationMillis = 300),
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "TopPaddingAnimation",
       )
 
     Box(
       modifier =
         Modifier.padding(
-          top = animatedTopPadding,
+          top = if (!hideTopBar) innerPadding.calculateTopPadding() else animatedTopPadding,
           start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
           end = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
         )

@@ -19,15 +19,15 @@ package com.google.ai.edge.gallery.ui.home
 // import androidx.compose.ui.tooling.preview.Preview
 // import com.google.ai.edge.gallery.ui.theme.GalleryTheme
 // import com.google.ai.edge.gallery.ui.preview.PreviewModelManagerViewModel
+import android.Manifest
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.provider.OpenableColumns
-import android.util.Log
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -52,27 +53,27 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.NoteAdd
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.rounded.ListAlt
 import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -85,30 +86,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Brush.Companion.linearGradient
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
-import androidx.core.os.bundleOf
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.GalleryTopAppBar
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.AppBarAction
@@ -116,16 +119,13 @@ import com.google.ai.edge.gallery.data.AppBarActionType
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.CategoryInfo
-import com.google.ai.edge.gallery.data.ConfigKeys
-import com.google.ai.edge.gallery.data.DEFAULT_TEMPERATURE
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.firebaseAnalytics
-import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.ui.common.RevealingText
 import com.google.ai.edge.gallery.ui.common.SwipingText
 import com.google.ai.edge.gallery.ui.common.TaskIcon
+import com.google.ai.edge.gallery.ui.common.buildTrackableUrlAnnotatedString
 import com.google.ai.edge.gallery.ui.common.rememberDelayedAnimationProgress
-import com.google.ai.edge.gallery.ui.common.tos.TosDialog
+import com.google.ai.edge.gallery.ui.common.tos.AppTosDialog
 import com.google.ai.edge.gallery.ui.common.tos.TosViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.customColors
@@ -149,20 +149,11 @@ private const val CONTENT_COMPOSABLES_ANIMATION_DURATION = 1200
 private const val CONTENT_COMPOSABLES_OFFSET_Y = 16
 
 /** Navigation destination data */
-object HomeScreenDestination {
+private object HomeScreenDestination {
   @StringRes val titleRes = R.string.app_name
 }
 
 private val PREDEFINED_CATEGORY_ORDER = listOf(Category.LLM.id, Category.EXPERIMENTAL.id)
-
-private val PREDEFINED_LLM_TASK_ORDER =
-  listOf(
-    BuiltInTaskId.LLM_ASK_IMAGE,
-    BuiltInTaskId.LLM_ASK_AUDIO,
-    BuiltInTaskId.LLM_CHAT,
-    BuiltInTaskId.LLM_PROMPT_LAB,
-    BuiltInTaskId.LLM_MOBILE_ACTIONS,
-  )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -170,69 +161,21 @@ fun HomeScreen(
   modelManagerViewModel: ModelManagerViewModel,
   tosViewModel: TosViewModel,
   navigateToTaskScreen: (Task) -> Unit,
+  onModelsClicked: () -> Unit,
   enableAnimation: Boolean,
   modifier: Modifier = Modifier,
 ) {
   val uiState by modelManagerViewModel.uiState.collectAsState()
   var showSettingsDialog by remember { mutableStateOf(false) }
-  var showImportModelSheet by remember { mutableStateOf(false) }
-  var showUnsupportedFileTypeDialog by remember { mutableStateOf(false) }
-  var showUnsupportedWebModelDialog by remember { mutableStateOf(false) }
-  val sheetState = rememberModalBottomSheetState()
-  var showImportDialog by remember { mutableStateOf(false) }
-  var showImportingDialog by remember { mutableStateOf(false) }
   var showTosDialog by remember { mutableStateOf(!tosViewModel.getIsTosAccepted()) }
-  var showMobileActionsChallengeDialog by remember { mutableStateOf(false) }
-  val selectedLocalModelFileUri = remember { mutableStateOf<Uri?>(null) }
-  val selectedImportedModelInfo = remember { mutableStateOf<ImportedModel?>(null) }
-  val coroutineScope = rememberCoroutineScope()
-  val snackbarHostState = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
+  val isDevBuild = context.packageName.endsWith(".dev")
 
-  val tasks = uiState.tasks
+  var tasks = uiState.tasks
+
   val categoryMap: Map<String, CategoryInfo> =
     remember(tasks) { tasks.associateBy { it.category.id }.mapValues { it.value.category } }
-  val tasksByCategories: Map<String, List<Task>> =
-    remember(tasks) {
-      val groupedTasks = tasks.groupBy { it.category.id }
-      val groupedSortedTasks: MutableMap<String, List<Task>> = mutableMapOf()
-      // Sort the tasks in categories by pre-defined order. Sort other tasks by label.
-      for (categoryId in groupedTasks.keys) {
-        val sortedTasks =
-          groupedTasks[categoryId]!!.sortedWith { a, b ->
-            if (categoryId == Category.LLM.id) {
-              val order: List<String> =
-                when (categoryId) {
-                  Category.LLM.id -> PREDEFINED_LLM_TASK_ORDER
-                  else -> listOf()
-                }
-              val indexA = order.indexOf(a.id)
-              val indexB = order.indexOf(b.id)
-              if (indexA != -1 && indexB != -1) {
-                indexA.compareTo(indexB)
-              } else if (indexA != -1) {
-                -1
-              } else if (indexB != -1) {
-                1
-              } else {
-                val ca = categoryMap[a.id]!!
-                val cb = categoryMap[b.id]!!
-                val caLabel = getCategoryLabel(context = context, category = ca)
-                val cbLabel = getCategoryLabel(context = context, category = cb)
-                caLabel.compareTo(cbLabel)
-              }
-            } else {
-              a.label.compareTo(b.label)
-            }
-          }
-        for ((index, task) in sortedTasks.withIndex()) {
-          task.index = index
-        }
-        groupedSortedTasks[categoryId] = sortedTasks
-      }
-      groupedSortedTasks
-    }
   val sortedCategories =
     remember(categoryMap) {
       categoryMap.keys
@@ -262,31 +205,6 @@ fun HomeScreen(
           }
         }
         .map { categoryMap[it]!! }
-    }
-
-  val filePickerLauncher: ActivityResultLauncher<Intent> =
-    rememberLauncherForActivityResult(
-      contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-      if (result.resultCode == android.app.Activity.RESULT_OK) {
-        result.data?.data?.let { uri ->
-          val fileName = getFileName(context = context, uri = uri)
-          Log.d(TAG, "Selected file: $fileName")
-          // Show warning for model file types other than .task and .litertlm.
-          if (fileName != null && !fileName.endsWith(".task") && !fileName.endsWith(".litertlm")) {
-            showUnsupportedFileTypeDialog = true
-          }
-          // Show warning for web-only model (by checking if the file name has "-web" in it).
-          else if (fileName != null && fileName.lowercase().contains("-web")) {
-            showUnsupportedWebModelDialog = true
-          } else {
-            selectedLocalModelFileUri.value = uri
-            showImportDialog = true
-          }
-        } ?: run { Log.d(TAG, "No file selected or URI is null.") }
-      } else {
-        Log.d(TAG, "File picking cancelled.")
-      }
     }
 
   // Show home screen content when TOS has been accepted.
@@ -334,115 +252,202 @@ fun HomeScreen(
     }
     // Main UI when allowlist is done loading.
     if (!loadingModelAllowlistDelayed && !uiState.loadingModelAllowlist) {
-      Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-          // Top bar animation:
-          //
-          // Fade in and move down at the same time.
-          val progress =
-            if (!enableAnimation) 1f
-            else
-              rememberDelayedAnimationProgress(
-                initialDelay = ANIMATION_INIT_DELAY - 50,
-                animationDurationMs = TOP_APP_BAR_ANIMATION_DURATION,
-                animationLabel = "top bar",
-              )
-          Box(
-            modifier =
-              Modifier.graphicsLayer {
-                alpha = progress
-                translationY = ((-16).dp * (1 - progress)).toPx()
-              }
-          ) {
-            GalleryTopAppBar(
-              title = stringResource(HomeScreenDestination.titleRes),
-              rightAction =
-                AppBarAction(
-                  actionType = AppBarActionType.APP_SETTING,
-                  actionFn = { showSettingsDialog = true },
-                ),
-            )
-          }
-        },
-        floatingActionButton = {
-          // A floating action button to show "import model" bottom sheet.
-          val cdImportModelFab = stringResource(R.string.cd_import_model_button)
-          SmallFloatingActionButton(
-            onClick = { showImportModelSheet = true },
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.semantics { contentDescription = cdImportModelFab },
-          ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-          }
-        },
-      ) { innerPadding ->
-        // Outer box for coloring the background edge to edge.
-        Box(
-          contentAlignment = Alignment.TopCenter,
-          modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer),
-        ) {
-          // Inner box to hold content.
-          Box(
-            contentAlignment = Alignment.TopCenter,
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-          ) {
-            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-              var selectedCategoryIndex by remember { mutableIntStateOf(0) }
+      val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-              // App title and intro text.
-              Column(
-                modifier =
-                  Modifier.padding(horizontal = 40.dp, vertical = 48.dp).semantics(
-                    mergeDescendants = true
-                  ) {},
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-              ) {
-                AppTitle(enableAnimation = enableAnimation)
-                IntroText(enableAnimation = enableAnimation)
-              }
+      val requestPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+          isGranted: Boolean ->
+          if (isGranted) {
+            // FCM SDK (and your app) can post notifications.
+          }
+        }
 
-              // Tab header for categories.
-              //
-              // synchronizes the `pagerState` and the `selectedCategoryIndex` to ensure that
-              //  both the tab header and the task list always show the correct category and page.
-              val pagerState = rememberPagerState(pageCount = { sortedCategories.size })
-              LaunchedEffect(pagerState.settledPage) {
-                selectedCategoryIndex = pagerState.settledPage
-              }
-              if (sortedCategories.size > 1) {
-                CategoryTabHeader(
-                  sortedCategories = sortedCategories,
-                  selectedIndex = selectedCategoryIndex,
-                  enableAnimation = enableAnimation,
-                  onCategorySelected = { index ->
-                    selectedCategoryIndex = index
-                    scope.launch { pagerState.animateScrollToPage(page = index) }
+      LaunchedEffect(Unit) {
+        delay(2000)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          if (
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+              PackageManager.PERMISSION_GRANTED
+          ) {
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+          }
+        }
+      }
+
+      // Close the menu when back button is pressed.
+      BackHandler(drawerState.isOpen) { scope.launch { drawerState.close() } }
+
+      ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+          ModalDrawerSheet {
+            Column(modifier = Modifier.padding(16.dp)) {
+              Row(modifier = Modifier.fillMaxWidth()) {
+                SquareDrawerItem(
+                  label = stringResource(R.string.drawer_settings_label),
+                  description = stringResource(R.string.drawer_settings_description),
+                  icon = Icons.Rounded.Settings,
+                  onClick = {
+                    showSettingsDialog = true
+                    scope.launch { drawerState.close() }
                   },
+                  modifier = Modifier.weight(1f),
+                  iconBrush =
+                    linearGradient(
+                      colors =
+                        listOf(
+                          MaterialTheme.customColors.taskBgGradientColors[2][0],
+                          MaterialTheme.customColors.taskBgGradientColors[2][1],
+                        )
+                    ),
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                SquareDrawerItem(
+                  label = stringResource(R.string.drawer_models_label),
+                  description = stringResource(R.string.drawer_models_description),
+                  icon = Icons.AutoMirrored.Rounded.ListAlt,
+                  onClick = {
+                    scope.launch { drawerState.close() }
+                    scope.launch {
+                      delay(50)
+                      onModelsClicked()
+                    }
+                  },
+                  modifier = Modifier.weight(1f),
+                  iconBrush =
+                    linearGradient(
+                      colors =
+                        listOf(
+                          MaterialTheme.customColors.taskBgGradientColors[1][0],
+                          MaterialTheme.customColors.taskBgGradientColors[1][1],
+                        )
+                    ),
                 )
               }
-
-              // Task list in a horizontal pager. Each page shows the list of tasks for the
-              // category.
-              TaskList(
-                pagerState = pagerState,
-                sortedCategories = sortedCategories,
-                tasksByCategories = tasksByCategories,
-                enableAnimation = enableAnimation,
-                navigateToTaskScreen = { task ->
-                  if (task.id == BuiltInTaskId.LLM_MOBILE_ACTIONS && task.models.isEmpty()) {
-                    showMobileActionsChallengeDialog = true
-                  } else {
-                    navigateToTaskScreen(task)
-                  }
-                },
+            }
+          }
+        },
+        gesturesEnabled = drawerState.isOpen,
+      ) {
+        Scaffold(
+          containerColor = MaterialTheme.colorScheme.background,
+          topBar = {
+            // Top bar animation:
+            //
+            // Fade in and move down at the same time.
+            val progress =
+              if (!enableAnimation) 1f
+              else
+                rememberDelayedAnimationProgress(
+                  initialDelay = ANIMATION_INIT_DELAY - 50,
+                  animationDurationMs = TOP_APP_BAR_ANIMATION_DURATION,
+                  animationLabel = "top bar",
+                )
+            Box(
+              modifier =
+                Modifier.graphicsLayer {
+                  alpha = progress
+                  translationY = ((-16).dp * (1 - progress)).toPx()
+                }
+            ) {
+              GalleryTopAppBar(
+                title = stringResource(HomeScreenDestination.titleRes),
+                leftAction =
+                  AppBarAction(
+                    actionType = AppBarActionType.MENU,
+                    actionFn = {
+                      scope.launch { drawerState.apply { if (isClosed) open() else close() } }
+                    },
+                  ),
               )
             }
+          },
+        ) { innerPadding ->
+          // Outer box for coloring the background edge to edge.
+          Box(
+            contentAlignment = Alignment.TopCenter,
+            modifier =
+              Modifier.fillMaxSize()
+                .background(
+                  MaterialTheme.colorScheme.surfaceContainer
+                ),
+          ) {
+            // Inner box to hold content.
+            Box(
+              contentAlignment = Alignment.TopCenter,
+              modifier =
+                Modifier.fillMaxSize()
+                  .padding(top = innerPadding.calculateTopPadding())
+                  .verticalScroll(rememberScrollState()),
+            ) {
 
-            SnackbarHost(
-              hostState = snackbarHostState,
-              modifier = Modifier.align(alignment = Alignment.BottomCenter).padding(bottom = 32.dp),
+              Column(modifier = Modifier.fillMaxWidth()) {
+                var selectedCategoryIndex by remember { mutableIntStateOf(0) }
+
+                // App title and intro text.
+                Column(
+                  modifier =
+                    Modifier.padding(
+                        horizontal = 40.dp,
+                        vertical = 48.dp,
+                      )
+                      .semantics(mergeDescendants = true) {},
+                  verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                  AppTitle(enableAnimation = enableAnimation)
+                  IntroText(
+                    enableAnimation = enableAnimation,
+                  )
+                }
+
+                // Tab header for categories.
+                //
+                // synchronizes the `pagerState` and the `selectedCategoryIndex` to ensure that
+                //  both the tab header and the task list always show the correct category and page.
+                val pagerState = rememberPagerState(pageCount = { sortedCategories.size })
+                LaunchedEffect(pagerState.settledPage) {
+                  selectedCategoryIndex = pagerState.settledPage
+                }
+                if (sortedCategories.size > 1) {
+                  CategoryTabHeader(
+                    sortedCategories = sortedCategories,
+                    selectedIndex = selectedCategoryIndex,
+                    enableAnimation = enableAnimation,
+                    onCategorySelected = { index ->
+                      selectedCategoryIndex = index
+                      scope.launch { pagerState.animateScrollToPage(page = index) }
+                    },
+                  )
+                }
+
+                // Task list in a horizontal pager. Each page shows the list of tasks for the
+                // category.
+                val grid = false
+                TaskList(
+                  modelManagerViewModel = modelManagerViewModel,
+                  pagerState = pagerState,
+                  sortedCategories = sortedCategories,
+                  tasksByCategories = uiState.tasksByCategory,
+                  enableAnimation = enableAnimation,
+                  navigateToTaskScreen = navigateToTaskScreen,
+                  grid = grid,
+                )
+
+                Spacer(modifier = Modifier.height(innerPadding.calculateBottomPadding() + 10.dp))
+              }
+            }
+
+            // Gradient overlay at the bottom.
+            Box(
+              modifier =
+                Modifier.fillMaxWidth()
+                  .height(innerPadding.calculateBottomPadding())
+                  .background(
+                    Brush.verticalGradient(
+                      colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surfaceContainer)
+                    )
+                  )
+                  .align(Alignment.BottomCenter)
             )
           }
         }
@@ -452,7 +457,7 @@ fun HomeScreen(
 
   // Show TOS dialog for users to accept.
   if (showTosDialog) {
-    TosDialog(
+    AppTosDialog(
       onTosAccepted = {
         showTosDialog = false
         tosViewModel.acceptTos()
@@ -466,165 +471,6 @@ fun HomeScreen(
       curThemeOverride = modelManagerViewModel.readThemeOverride(),
       modelManagerViewModel = modelManagerViewModel,
       onDismissed = { showSettingsDialog = false },
-    )
-  }
-
-  if (showMobileActionsChallengeDialog) {
-    MobileActionsChallengeDialog(
-      onDismiss = { showMobileActionsChallengeDialog = false },
-      onLoadModel = {
-        // Show file picker.
-        val intent =
-          Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            // Single select.
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
-          }
-        filePickerLauncher.launch(intent)
-      },
-      onSendEmail = {
-        context.startActivity(
-          Intent(Intent.ACTION_SEND).apply {
-            data = "mailto:".toUri()
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Finetune FunctionGemma 270M for Mobile Actions")
-            putExtra(Intent.EXTRA_TEXT, "https://ai.google.dev/gemma/docs/mobile-actions")
-          }
-        )
-      },
-    )
-  }
-
-  // Import model bottom sheet.
-  if (showImportModelSheet) {
-    ModalBottomSheet(onDismissRequest = { showImportModelSheet = false }, sheetState = sheetState) {
-      Text(
-        "Import model",
-        style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp),
-      )
-      val cbImportFromLocalFile = stringResource(R.string.cd_import_model_from_local_file_button)
-      Box(
-        modifier =
-          Modifier.clickable {
-              coroutineScope.launch {
-                // Give it sometime to show the click effect.
-                delay(200)
-                showImportModelSheet = false
-
-                // Show file picker.
-                val intent =
-                  Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
-                    // Single select.
-                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
-                  }
-                filePickerLauncher.launch(intent)
-              }
-            }
-            .semantics {
-              role = Role.Button
-              contentDescription = cbImportFromLocalFile
-            }
-      ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.fillMaxWidth().padding(16.dp),
-        ) {
-          Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null)
-          Text("From local model file", modifier = Modifier.clearAndSetSemantics {})
-        }
-      }
-    }
-  }
-
-  // Import dialog
-  if (showImportDialog) {
-    selectedLocalModelFileUri.value?.let { uri ->
-      // If it is from the Mobile Actions challenge flow.
-      val supportMobileActions = showMobileActionsChallengeDialog
-      showMobileActionsChallengeDialog = false
-
-      ModelImportDialog(
-        uri = uri,
-        onDismiss = { showImportDialog = false },
-        onDone = { info ->
-          selectedImportedModelInfo.value = info
-          showImportDialog = false
-          showImportingDialog = true
-        },
-        defaultValues =
-          mapOf(
-            ConfigKeys.SUPPORT_MOBILE_ACTIONS to supportMobileActions,
-            ConfigKeys.DEFAULT_TEMPERATURE to
-              (if (supportMobileActions) 0.0f else DEFAULT_TEMPERATURE),
-          ),
-      )
-    }
-  }
-
-  // Importing in progress dialog.
-  if (showImportingDialog) {
-    selectedLocalModelFileUri.value?.let { uri ->
-      selectedImportedModelInfo.value?.let { info ->
-        ModelImportingDialog(
-          uri = uri,
-          info = info,
-          onDismiss = { showImportingDialog = false },
-          onDone = {
-            modelManagerViewModel.addImportedLlmModel(info = it)
-            showImportingDialog = false
-
-            // Show a snack bar for successful import.
-            scope.launch { snackbarHostState.showSnackbar("Model imported successfully") }
-          },
-        )
-      }
-    }
-  }
-
-  // Alert dialog for unsupported file type.
-  if (showUnsupportedFileTypeDialog) {
-    AlertDialog(
-      icon = {
-        Icon(
-          Icons.Rounded.Error,
-          contentDescription = stringResource(R.string.cd_error),
-          tint = MaterialTheme.colorScheme.error,
-        )
-      },
-      onDismissRequest = { showUnsupportedFileTypeDialog = false },
-      title = { Text("Unsupported file type") },
-      text = { Text("Only \".task\" or \".litertlm\" file type is supported.") },
-      confirmButton = {
-        Button(onClick = { showUnsupportedFileTypeDialog = false }) {
-          Text(stringResource(R.string.ok))
-        }
-      },
-    )
-  }
-
-  // Alert dialog for unsupported web model.
-  if (showUnsupportedWebModelDialog) {
-    AlertDialog(
-      icon = {
-        Icon(
-          Icons.Rounded.Error,
-          contentDescription = stringResource(R.string.cd_error),
-          tint = MaterialTheme.colorScheme.error,
-        )
-      },
-      onDismissRequest = { showUnsupportedWebModelDialog = false },
-      title = { Text("Unsupported model type") },
-      text = { Text("Looks like the model is a web-only model and is not supported by the app.") },
-      confirmButton = {
-        Button(onClick = { showUnsupportedWebModelDialog = false }) {
-          Text(stringResource(R.string.ok))
-        }
-      },
     )
   }
 
@@ -729,42 +575,33 @@ private fun AppTitle(enableAnimation: Boolean) {
 }
 
 @Composable
-private fun IntroText(enableAnimation: Boolean) {
-  val url = "https://huggingface.co/litert-community"
-  val linkColor = MaterialTheme.customColors.linkColor
-  val uriHandler = LocalUriHandler.current
+private fun IntroText(
+  enableAnimation: Boolean,
+) {
+  val litertUrl = "https://huggingface.co/litert-community"
 
   // Intro text animation:
   //
   // fade in + slide up.
   val progress =
-    if (!enableAnimation) 1f
-    else
+    if (!enableAnimation) {
+      1f
+    } else {
       rememberDelayedAnimationProgress(
         initialDelay = TITLE_SECOND_LINE_ANIMATION_START,
         animationDurationMs = CONTENT_COMPOSABLES_ANIMATION_DURATION,
         animationLabel = "intro text animation",
       )
+    }
 
   val introText = buildAnnotatedString {
     append("${stringResource(R.string.app_intro)} ")
-    // TODO: Consolidate the link clicking logic into ui/common/ClickableLink.kt.
-    withLink(
-      link =
-        LinkAnnotation.Url(
-          url = url,
-          styles =
-            TextLinkStyles(
-              style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
-            ),
-          linkInteractionListener = { _ ->
-            firebaseAnalytics?.logEvent("resource_link_click", bundleOf("link_destination" to url))
-            uriHandler.openUri(url)
-          },
-        )
-    ) {
-      append(stringResource(R.string.litert_community_label))
-    }
+    append(
+      buildTrackableUrlAnnotatedString(
+        url = litertUrl,
+        linkText = stringResource(R.string.litert_community_label),
+      )
+    )
   }
   Text(
     introText,
@@ -823,11 +660,10 @@ private fun CategoryTabHeader(
               // Scroll to clicked item when the item is not fully inside view.
               scope.launch {
                 val visibleItems = listState.layoutInfo.visibleItemsInfo
-                val targetItem =
-                  visibleItems.find {
-                    // +1 because the first item is the item keyed at spacer_start.
-                    it.index == index + 1
-                  }
+                val targetItem = visibleItems.find {
+                  // +1 because the first item is the item keyed at spacer_start.
+                  it.index == index + 1
+                }
                 if (
                   targetItem == null ||
                     targetItem.offset < 0 ||
@@ -855,11 +691,13 @@ private fun CategoryTabHeader(
 
 @Composable
 private fun TaskList(
+  modelManagerViewModel: ModelManagerViewModel,
   pagerState: PagerState,
   sortedCategories: List<CategoryInfo>,
   tasksByCategories: Map<String, List<Task>>,
   enableAnimation: Boolean,
   navigateToTaskScreen: (Task) -> Unit,
+  grid: Boolean = false,
 ) {
   // Model list animation:
   //
@@ -889,23 +727,67 @@ private fun TaskList(
     contentPadding = PaddingValues(horizontal = 20.dp),
   ) { pageIndex ->
     val tasks = tasksByCategories[sortedCategories[pageIndex].id]!!
-    Column(
-      modifier =
-        Modifier.fillMaxWidth().padding(4.dp).graphicsLayer {
-          translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
-        },
-      verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-      var index = 0
-      for (task in tasks) {
-        TaskCard(
-          task = task,
-          index = index,
-          animate = (pageIndex == 0 || pageIndex == 1) && !initialAnimationDone && enableAnimation,
-          onClick = { navigateToTaskScreen(task) },
-          modifier = Modifier.fillMaxWidth(),
-        )
-        index++
+    if (grid) {
+      Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier =
+          Modifier.fillMaxWidth().padding(4.dp).graphicsLayer {
+            translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
+          },
+      ) {
+        for (i in tasks.indices step 2) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+          ) {
+            // First item in the row
+            TaskCard(
+              task = tasks[i],
+              index = i,
+              animate =
+                (pageIndex == 0 || pageIndex == 1) && !initialAnimationDone && enableAnimation,
+              onClick = { navigateToTaskScreen(tasks[i]) },
+              modifier = Modifier.weight(1f),
+              square = true,
+            )
+
+            // Second item in the row, if it exists
+            if (i + 1 < tasks.size) {
+              TaskCard(
+                task = tasks[i + 1],
+                index = i + 1,
+                animate =
+                  (pageIndex == 0 || pageIndex == 1) && !initialAnimationDone && enableAnimation,
+                onClick = { navigateToTaskScreen(tasks[i + 1]) },
+                modifier = Modifier.weight(1f),
+                square = true,
+              )
+            } else {
+              // Add a spacer to fill the remaining space if there's only one item in the last row
+              Spacer(modifier = Modifier.weight(1f))
+            }
+          }
+        }
+      }
+    } else {
+      Column(
+        modifier =
+          Modifier.fillMaxWidth().padding(4.dp).graphicsLayer {
+            translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
+          },
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        for ((index, task) in tasks.withIndex()) {
+          TaskCard(
+            task = task,
+            index = index,
+            animate =
+              (pageIndex == 0 || pageIndex == 1) && !initialAnimationDone && enableAnimation,
+            onClick = { navigateToTaskScreen(task) },
+            modifier = Modifier.fillMaxWidth(),
+            square = false,
+          )
+        }
       }
     }
   }
@@ -918,6 +800,8 @@ private fun TaskCard(
   animate: Boolean,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  description: String = "",
+  square: Boolean = false,
 ) {
   // Observes the model count and updates the model count label with a fade-in/fade-out animation
   // whenever the count changes.
@@ -975,59 +859,127 @@ private fun TaskCard(
         .clickable(onClick = onClick)
         .graphicsLayer { alpha = progress }
         .semantics { contentDescription = cbTask },
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.customColors.taskCardBgColor),
+    colors =
+      CardDefaults.cardColors(
+        containerColor =
+          if (description.isNotEmpty() || square) {
+            MaterialTheme.colorScheme.surfaceContainer
+          } else {
+
+            MaterialTheme.customColors.taskCardBgColor
+          }
+      ),
   ) {
-    Row(
-      modifier = Modifier.fillMaxSize().padding(24.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-      // Title and model count
-      Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    if (square) {
+      Column(
+        modifier = Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        TaskIcon(task = task, width = 40.dp)
+        Column() {
+          Text(
+            curModelCountLabel,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+            modifier = Modifier.clearAndSetSemantics {},
+          )
           Text(
             task.label,
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
           )
-          if (task.experimental) {
-            Icon(
-              painter = painterResource(R.drawable.ic_experiment),
-              contentDescription = "Experimental",
-              modifier = Modifier.size(20.dp).padding(start = 4.dp),
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          Text(
+            task.shortDescription,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 14.sp),
+            modifier = Modifier.clearAndSetSemantics {},
+            minLines = 2,
+            maxLines = 2,
+            autoSize =
+              TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 12.sp, stepSize = 1.sp),
+          )
+        }
+      }
+    } else {
+      Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        if (description.isNotEmpty()) {
+          // Icon.
+          TaskIcon(task = task, width = 40.dp)
+
+          // Title and description.
+          Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text(
+                task.label,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
+              )
+              if (task.newFeature) {
+                Box(
+                  modifier =
+                    Modifier.offset(y = (-6).dp, x = 6.dp)
+                      .clip(RoundedCornerShape(8.dp))
+                      .background(MaterialTheme.customColors.newFeatureContainerColor)
+                      .padding(horizontal = 12.dp)
+                      .height(26.dp),
+                  contentAlignment = Alignment.Center,
+                ) {
+                  Text(
+                    "New",
+                    color = MaterialTheme.customColors.newFeatureTextColor,
+                    style = MaterialTheme.typography.labelLarge,
+                  )
+                }
+              }
+            }
+            Text(
+              description,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              style =
+                MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 15.sp),
+              modifier = Modifier.clearAndSetSemantics {},
             )
           }
-        }
-        Text(
-          curModelCountLabel,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          style = MaterialTheme.typography.bodyMedium,
-          modifier = Modifier.clearAndSetSemantics {},
-        )
-      }
+        } else {
+          // Title and model count
+          Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                task.label,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
+              )
+              if (task.experimental) {
+                Icon(
+                  painter = painterResource(R.drawable.ic_experiment),
+                  contentDescription = "Experimental",
+                  modifier = Modifier.size(20.dp).padding(start = 4.dp),
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+            }
+            Text(
+              curModelCountLabel,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              style = MaterialTheme.typography.bodyMedium,
+              modifier = Modifier.clearAndSetSemantics {},
+            )
+          }
 
-      // Icon.
-      TaskIcon(task = task, width = 40.dp)
+          // Icon.
+          TaskIcon(task = task, width = 40.dp)
+        }
+      }
     }
   }
-}
-
-// Helper function to get the file name from a URI
-fun getFileName(context: Context, uri: Uri): String? {
-  if (uri.scheme == "content") {
-    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-      if (cursor.moveToFirst()) {
-        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        if (nameIndex != -1) {
-          return cursor.getString(nameIndex)
-        }
-      }
-    }
-  } else if (uri.scheme == "file") {
-    return uri.lastPathSegment
-  }
-  return null
 }
 
 private fun getCategoryLabel(context: Context, category: CategoryInfo): String {
@@ -1040,14 +992,3 @@ private fun getCategoryLabel(context: Context, category: CategoryInfo): String {
   }
   return context.getString(R.string.category_unlabeled)
 }
-
-// @Preview
-// @Composable
-// fun HomeScreenPreview() {
-//   GalleryTheme {
-//     HomeScreen(
-//       modelManagerViewModel = PreviewModelManagerViewModel(context = LocalContext.current),
-//       navigateToTaskScreen = {},
-//     )
-//   }
-// }

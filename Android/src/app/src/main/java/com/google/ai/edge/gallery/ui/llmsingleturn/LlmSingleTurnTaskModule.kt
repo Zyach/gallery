@@ -27,7 +27,6 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import dagger.Module
 import dagger.Provides
@@ -46,6 +45,7 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
       icon = Icons.Outlined.Widgets,
       models = mutableListOf(),
       description = "Single turn use cases with on-device large language models",
+      shortDescription = "Single turn use cases",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
@@ -58,13 +58,12 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: (String) -> Unit,
   ) {
-    model.runtimeHelper.initialize(
+    LlmChatModelHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
-      systemInstruction = null,
     )
   }
 
@@ -74,7 +73,7 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     model: Model,
     onDone: () -> Unit,
   ) {
-    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
+    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable
@@ -83,7 +82,6 @@ class LlmSingleTurnTask @Inject constructor() : CustomTask {
     LlmSingleTurnScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
-      onOpenBenchmarkScreen = myData.onOpenBenchmarkScreen,
     )
   }
 }

@@ -20,6 +20,7 @@ package com.google.ai.edge.gallery.ui.common.chat
 // import com.google.ai.edge.gallery.ui.preview.PreviewModelManagerViewModel
 // import com.google.ai.edge.gallery.ui.preview.TASK_TEST1
 // import com.google.ai.edge.gallery.ui.theme.GalleryTheme
+
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -61,6 +62,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
@@ -71,6 +74,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 private const val TAG = "AGChatView"
+
+data class SendMessageTrigger(val model: Model, val messages: List<ChatMessage>)
 
 /**
  * A composable that displays a chat interface, allowing users to interact with different models
@@ -89,13 +94,20 @@ fun ChatView(
   onSendMessage: (Model, List<ChatMessage>) -> Unit,
   onRunAgainClicked: (Model, ChatMessage) -> Unit,
   onBenchmarkClicked: (Model, ChatMessage, Int, Int) -> Unit,
-  onOpenBenchmarkScreen: (Model) -> Unit = {},
   navigateUp: () -> Unit,
   modifier: Modifier = Modifier,
   onResetSessionClicked: (Model) -> Unit = {},
   onStreamImageMessage: (Model, ChatMessageImage) -> Unit = { _, _ -> },
   onStopButtonClicked: (Model) -> Unit = {},
   showStopButtonInInputWhenInProgress: Boolean = false,
+  composableBelowMessageList: @Composable (Model) -> Unit = {},
+  showImagePicker: Boolean = false,
+  showAudioPicker: Boolean = false,
+  emptyStateComposable: @Composable (Model) -> Unit = {},
+  allowEditingSystemPrompt: Boolean = false,
+  curSystemPrompt: String = "",
+  onSystemPromptChanged: (String) -> Unit = {},
+  sendMessageTrigger: SendMessageTrigger? = null,
 ) {
   val uiState by viewModel.uiState.collectAsState()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
@@ -133,6 +145,10 @@ fun ChatView(
     }
   }
 
+  LaunchedEffect(sendMessageTrigger) {
+    sendMessageTrigger?.let { trigger -> onSendMessage(trigger.model, trigger.messages) }
+  }
+
   // Handle system's edge swipe.
   BackHandler {
     val modelInitializationStatus =
@@ -156,33 +172,39 @@ fun ChatView(
         inProgress = uiState.inProgress,
         modelPreparing = uiState.preparing,
         onResetSessionClicked = onResetSessionClicked,
-        onBenchmarkScreenClicked = onOpenBenchmarkScreen,
         onConfigChanged = { old, new ->
+          // Filter out config values that are not relevant to the task.
+          //
+          // - The "reset conversation turn count" is only valid for tiny garden task.
+          val filteredOld = old.toMutableMap()
+          val filteredNew = new.toMutableMap()
+          if (task.id != BuiltInTaskId.LLM_TINY_GARDEN) {
+            filteredOld.remove(ConfigKeys.RESET_CONVERSATION_TURN_COUNT.label)
+            filteredNew.remove(ConfigKeys.RESET_CONVERSATION_TURN_COUNT.label)
+          }
           viewModel.addConfigChangedMessage(
-            oldConfigValues = old,
-            newConfigValues = new,
+            oldConfigValues = filteredOld,
+            newConfigValues = filteredNew,
             model = selectedModel,
           )
         },
         onBackClicked = { handleNavigateUp() },
         onModelSelected = { prevModel, curModel ->
           if (prevModel.name != curModel.name) {
-            modelManagerViewModel.cleanupModel(
-              context = context,
-              task = task,
-              model = prevModel,
-              onDone = { modelManagerViewModel.selectModel(model = curModel) },
-            )
-          } else {
-            modelManagerViewModel.selectModel(model = curModel)
+            modelManagerViewModel.cleanupModel(context = context, task = task, model = prevModel)
           }
+          modelManagerViewModel.selectModel(model = curModel)
         },
+        allowEditingSystemPrompt = allowEditingSystemPrompt,
+        curSystemPrompt = curSystemPrompt,
+        onSystemPromptChanged = onSystemPromptChanged,
       )
     },
   ) { innerPadding ->
     Box {
-      // val curSelectedModel = task.models[pageIndex]
       val curModelDownloadStatus = modelManagerUiState.modelDownloadStatus[selectedModel.name]
+
+      composableBelowMessageList(selectedModel)
 
       Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         AnimatedContent(
@@ -198,7 +220,7 @@ fun ChatView(
                 viewModel = viewModel,
                 innerPadding = innerPadding,
                 navigateUp = navigateUp,
-                onSendMessage = onSendMessage,
+                onSendMessage = { model, messages -> onSendMessage(model, messages) },
                 onRunAgainClicked = onRunAgainClicked,
                 onBenchmarkClicked = onBenchmarkClicked,
                 onStreamImageMessage = onStreamImageMessage,
@@ -219,6 +241,9 @@ fun ChatView(
                 },
                 modifier = Modifier.weight(1f),
                 showStopButtonInInputWhenInProgress = showStopButtonInInputWhenInProgress,
+                showImagePicker = showImagePicker,
+                showAudioPicker = showAudioPicker,
+                emptyStateComposable = emptyStateComposable,
               )
             // Model download
             false ->
@@ -250,7 +275,11 @@ fun ChatView(
             modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f)),
           ) { page ->
             allImageViewerImages[page].let { image ->
-              ZoomableImage(bitmap = image.asImageBitmap(), pagerState = pagerState)
+              ZoomableImage(
+                bitmap = image.asImageBitmap(),
+                pagerState = pagerState,
+                modifier = Modifier.fillMaxSize(),
+              )
             }
           }
 
@@ -274,21 +303,3 @@ fun ChatView(
     }
   }
 }
-
-// @Preview
-// @Composable
-// fun ChatScreenPreview() {
-//   GalleryTheme {
-//     val context = LocalContext.current
-//     val task = TASK_TEST1
-//     ChatView(
-//       task = task,
-//       viewModel = PreviewChatModel(context = context),
-//       modelManagerViewModel = PreviewModelManagerViewModel(context = context),
-//       onSendMessage = { _, _ -> },
-//       onRunAgainClicked = { _, _ -> },
-//       onBenchmarkClicked = { _, _, _, _ -> },
-//       navigateUp = {},
-//     )
-//   }
-// }

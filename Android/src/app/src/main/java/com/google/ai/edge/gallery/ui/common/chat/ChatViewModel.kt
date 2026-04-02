@@ -17,8 +17,10 @@
 package com.google.ai.edge.gallery.ui.common.chat
 
 import android.util.Log
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import com.google.ai.edge.gallery.common.processLlmResponse
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,12 +45,6 @@ data class ChatUiState(
 
   /** A map of model names to the currently streaming chat message. */
   val streamingMessagesByModel: Map<String, ChatMessage> = mapOf(),
-
-  /*
-   * A map of model names to a map of chat messages to a boolean indicating whether the message is
-   * showing the stats below it.
-   */
-  val showingStatsByModel: Map<String, MutableSet<ChatMessage>> = mapOf(),
 )
 
 /** ViewModel responsible for managing the chat UI state and handling chat-related operations. */
@@ -109,12 +105,6 @@ abstract class ChatViewModel() : ViewModel() {
     _uiState.update { _uiState.value.copy(messagesByModel = newMessagesByModel) }
   }
 
-  fun setMessages(model: Model, messages: List<ChatMessage>) {
-    val newMessagesByModel = _uiState.value.messagesByModel.toMutableMap()
-    newMessagesByModel[model.name] = messages.toMutableList()
-    _uiState.update { _uiState.value.copy(messagesByModel = newMessagesByModel) }
-  }
-
   fun getLastMessage(model: Model): ChatMessage? {
     return (_uiState.value.messagesByModel[model.name] ?: listOf()).lastOrNull()
   }
@@ -145,6 +135,7 @@ abstract class ChatViewModel() : ViewModel() {
             content = newContent,
             inProgress = lastMessage.inProgress,
             side = lastMessage.side,
+            hideSenderLabel = lastMessage.hideSenderLabel,
             accelerator = lastMessage.accelerator,
           )
         newMessages.removeAt(newMessages.size - 1)
@@ -163,7 +154,7 @@ abstract class ChatViewModel() : ViewModel() {
   ) {
     val newMessagesByModel = _uiState.value.messagesByModel.toMutableMap()
     val newMessages = newMessagesByModel[model.name]?.toMutableList() ?: mutableListOf()
-    if (newMessages.size > 0) {
+    if (newMessages.isNotEmpty()) {
       val lastMessage = newMessages.last()
       if (lastMessage is ChatMessageText) {
         val newContent = processLlmResponse(response = "${lastMessage.content}${partialContent}")
@@ -173,6 +164,7 @@ abstract class ChatViewModel() : ViewModel() {
             side = lastMessage.side,
             latencyMs = latencyMs,
             accelerator = lastMessage.accelerator,
+            hideSenderLabel = lastMessage.hideSenderLabel,
           )
         newMessages.removeAt(newMessages.size - 1)
         newMessages.add(newLastMessage)
@@ -233,6 +225,119 @@ abstract class ChatViewModel() : ViewModel() {
     _uiState.update { _uiState.value.copy(streamingMessagesByModel = newStreamingMessagesByModel) }
   }
 
+  fun updateCollapsableProgressPanelMessage(
+    model: Model,
+    title: String,
+    inProgress: Boolean,
+    doneIcon: ImageVector,
+    addItemTitle: String,
+    addItemDescription: String,
+    customData: Any? = null,
+  ) {
+    val accelerator = model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = "")
+    val newMessagesByModel = _uiState.value.messagesByModel.toMutableMap()
+    val newMessages = newMessagesByModel[model.name]?.toMutableList() ?: mutableListOf()
+
+    val createNewCollapsableMessage = {
+      ChatMessageCollapsableProgressPanel(
+        title = title,
+        inProgress = inProgress,
+        doneIcon = doneIcon,
+        items =
+          if (addItemTitle.isNotEmpty()) {
+            listOf(ProgressPanelItem(title = addItemTitle, description = addItemDescription))
+          } else {
+            listOf()
+          },
+        accelerator = accelerator,
+        customData = customData,
+      )
+    }
+
+    if (newMessages.isNotEmpty() && newMessages.last() is ChatMessageLoading) {
+      newMessages.removeAt(newMessages.size - 1)
+      newMessages.add(createNewCollapsableMessage())
+    } else {
+      val lastProgressPanelMessage =
+        getLastMessageWithType(model = model, type = ChatMessageType.COLLAPSABLE_PROGRESS_PANEL)
+      val lastProgressPanelMessageIndex = newMessages.indexOf(lastProgressPanelMessage)
+      val lastUserTextMessage =
+        getLastMessageWithTypeAndSide(
+          model = model,
+          type = ChatMessageType.TEXT,
+          side = ChatSide.USER,
+        )
+      val lastUserTextMessageIndex = newMessages.indexOf(lastUserTextMessage)
+
+      // If the last user text message is after the last progress panel message, insert the new
+      // collapsable message after the last user text message.
+      if (
+        lastProgressPanelMessage != null &&
+          lastUserTextMessage != null &&
+          lastUserTextMessageIndex > lastProgressPanelMessageIndex
+      ) {
+        newMessages.add(lastUserTextMessageIndex + 1, createNewCollapsableMessage())
+      }
+      // If the last progress panel message is a collapsable progress panel, update it.
+      else if (
+        lastProgressPanelMessage != null &&
+          lastProgressPanelMessage is ChatMessageCollapsableProgressPanel
+      ) {
+        val updatedMessage =
+          ChatMessageCollapsableProgressPanel(
+            title = title,
+            accelerator = accelerator,
+            inProgress = inProgress,
+            doneIcon = doneIcon,
+            items =
+              lastProgressPanelMessage.items +
+                if (addItemTitle.isNotEmpty()) {
+                  listOf(ProgressPanelItem(title = addItemTitle, description = addItemDescription))
+                } else {
+                  listOf()
+                },
+            customData = lastProgressPanelMessage.customData,
+            logMessages = lastProgressPanelMessage.logMessages,
+          )
+        newMessages[lastProgressPanelMessageIndex] = updatedMessage
+      } else {
+        // If none of the above conditions match (for example, the chat history for the
+        // current model is empty after a model switch during skill execution),
+        // simply append a new collapsable progress panel to show the running skill status.
+        newMessages.add(createNewCollapsableMessage())
+      }
+    }
+    newMessagesByModel[model.name] = newMessages
+    _uiState.update { _uiState.value.copy(messagesByModel = newMessagesByModel) }
+  }
+
+  fun addLogMessageToLastCollapsableProgressPanel(model: Model, logMessage: LogMessage) {
+    val newMessagesByModel = _uiState.value.messagesByModel.toMutableMap()
+    val newMessages = newMessagesByModel[model.name]?.toMutableList() ?: mutableListOf()
+    if (newMessages.isNotEmpty()) {
+      val lastCollapsableIndex = newMessages.indexOfLast {
+        it is ChatMessageCollapsableProgressPanel
+      }
+      if (lastCollapsableIndex != -1) {
+        val lastMessage = newMessages[lastCollapsableIndex] as ChatMessageCollapsableProgressPanel
+        val newLogMessages = lastMessage.logMessages + logMessage
+        val updatedMessage =
+          ChatMessageCollapsableProgressPanel(
+            title = lastMessage.title,
+            inProgress = lastMessage.inProgress,
+            accelerator = lastMessage.accelerator,
+            doneIcon = lastMessage.doneIcon,
+            items = lastMessage.items,
+            logMessages = newLogMessages,
+            customData = lastMessage.customData,
+          )
+        newMessages[lastCollapsableIndex] = updatedMessage
+      }
+    }
+    newMessagesByModel[model.name] = newMessages
+    _uiState.update { _uiState.value.copy(messagesByModel = newMessagesByModel) }
+  }
+
   fun setInProgress(inProgress: Boolean) {
     _uiState.update { _uiState.value.copy(inProgress = inProgress) }
   }
@@ -262,22 +367,6 @@ abstract class ChatViewModel() : ViewModel() {
 
   fun getMessageIndex(model: Model, message: ChatMessage): Int {
     return (_uiState.value.messagesByModel[model.name] ?: listOf()).indexOf(message)
-  }
-
-  fun isShowingStats(model: Model, message: ChatMessage): Boolean {
-    return _uiState.value.showingStatsByModel[model.name]?.contains(message) ?: false
-  }
-
-  fun toggleShowingStats(model: Model, message: ChatMessage) {
-    val newShowingStatsByModel = _uiState.value.showingStatsByModel.toMutableMap()
-    val newShowingStats = newShowingStatsByModel[model.name]?.toMutableSet() ?: mutableSetOf()
-    if (newShowingStats.contains(message)) {
-      newShowingStats.remove(message)
-    } else {
-      newShowingStats.add(message)
-    }
-    newShowingStatsByModel[model.name] = newShowingStats
-    _uiState.update { _uiState.value.copy(showingStatsByModel = newShowingStatsByModel) }
   }
 
   private fun createUiState(): ChatUiState {
