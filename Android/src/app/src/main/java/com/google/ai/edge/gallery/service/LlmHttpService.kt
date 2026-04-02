@@ -29,9 +29,7 @@ import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.FileWriter
 import java.io.InputStreamReader
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -490,7 +488,6 @@ class LlmHttpService : Service() {
       requestId: String,
       endpoint: String,
     ): String? {
-      // Lazy init model once.
       synchronized(this) {
         if (model.instance == null) {
           var err = ""
@@ -506,95 +503,45 @@ class LlmHttpService : Service() {
         }
       }
 
-      val sb = StringBuilder()
-      val inferenceLatch = CountDownLatch(1)
-      val requestLifecycleLatch = CountDownLatch(1)
-      var error: String? = null
-      val startMs = SystemClock.elapsedRealtime()
-      var firstTokenMs: Long? = null
-      executor.execute {
-        synchronized(inferenceLock) {
-          try {
-            // Keep the model warm, but reset conversation state for every HTTP request while
-            // holding the same lock used for generation so overlapping requests cannot invalidate
-            // an in-flight conversation and each request starts from a clean conversation state.
-            LlmChatModelHelper.resetConversation(
-              model = model,
-              supportImage = false,
-              supportAudio = false,
-              systemInstruction = null,
-            )
-            LlmChatModelHelper.runInference(
-              model = model,
-              input = prompt,
-              resultListener = { partial, done, _ ->
-                if (partial.isNotEmpty()) {
-                  if (firstTokenMs == null) {
-                    firstTokenMs = SystemClock.elapsedRealtime() - startMs
-                  }
-                  sb.append(partial)
-                }
-                if (done) inferenceLatch.countDown()
-              },
-              cleanUpListener = {},
-              onError = { e -> error = e; inferenceLatch.countDown() },
-            )
+      val result = LlmHttpInferenceGateway.execute(
+        prompt = prompt,
+        timeoutSeconds = timeoutSeconds,
+        executor = executor,
+        inferenceLock = inferenceLock,
+        resetConversation = {
+          LlmChatModelHelper.resetConversation(
+            model = model,
+            supportImage = false,
+            supportAudio = false,
+            systemInstruction = null,
+          )
+        },
+        runInference = { input, onPartial, onError ->
+          LlmChatModelHelper.runInference(
+            model = model,
+            input = input,
+            resultListener = { partial, done, _ -> onPartial(partial, done) },
+            cleanUpListener = {},
+            onError = onError,
+          )
+        },
+        cancelInference = {
+          val instance = model.instance as? LlmModelInstance
+          instance?.conversation?.cancelProcess()
+        },
+        elapsedMs = { SystemClock.elapsedRealtime() },
+      )
 
-            // Hold the request lock for the full lifetime of the async inference so no later
-            // request can reset the conversation while this one is still generating.
-            val completed = inferenceLatch.await(timeoutSeconds, TimeUnit.SECONDS)
-            if (!completed && error == null) {
-              error = "timeout"
-              cancelInference(
-                model = model,
-                requestId = requestId,
-                endpoint = endpoint,
-                reason = "timeout",
-              )
-              LlmChatModelHelper.resetConversation(
-                model = model,
-                supportImage = false,
-                supportAudio = false,
-                systemInstruction = null,
-              )
-            } else if (error != null) {
-              cancelInference(model = model, requestId = requestId, endpoint = endpoint, reason = "error")
-            }
-          } catch (t: Throwable) {
-            error = t.message
-            inferenceLatch.countDown()
-          } finally {
-            requestLifecycleLatch.countDown()
-          }
-        }
-      }
-      val completed = requestLifecycleLatch.await(timeoutSeconds + 5, TimeUnit.SECONDS)
-      if (!completed && error == null) {
-        error = "timeout"
-      }
-      val totalMs = SystemClock.elapsedRealtime() - startMs
-      val ttfbMs = firstTokenMs?.toString() ?: "-1"
-      val output = sb.toString()
-      return if (error != null) {
+      return if (result.error != null) {
         logEvent(
-          "request_error id=$requestId endpoint=$endpoint error=$error totalMs=$totalMs ttfbMs=$ttfbMs outputChars=${output.length}"
+          "request_error id=$requestId endpoint=$endpoint error=${result.error} totalMs=${result.totalMs} ttfbMs=${result.ttfbMs} outputChars=${result.output?.length ?: 0}"
         )
         null
       } else {
         logEvent(
-          "request_done id=$requestId endpoint=$endpoint totalMs=$totalMs ttfbMs=$ttfbMs outputChars=${output.length}"
+          "request_done id=$requestId endpoint=$endpoint totalMs=${result.totalMs} ttfbMs=${result.ttfbMs} outputChars=${result.output?.length ?: 0}"
         )
-        output
-      }
-    }
-
-    private fun cancelInference(model: Model, requestId: String, endpoint: String, reason: String) {
-      val instance = model.instance as? LlmModelInstance ?: return
-      try {
-        instance.conversation.cancelProcess()
-        logEvent("request_cancel id=$requestId endpoint=$endpoint reason=$reason")
-      } catch (e: Exception) {
-        logEvent("request_cancel_error id=$requestId endpoint=$endpoint reason=$reason error=${e.message}")
+        result.output
       }
     }
 
