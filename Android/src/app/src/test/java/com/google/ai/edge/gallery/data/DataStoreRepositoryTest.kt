@@ -8,6 +8,7 @@ import com.google.ai.edge.gallery.UserDataSerializer
 import com.google.ai.edge.gallery.proto.BenchmarkResult
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
+import java.io.FileOutputStream
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.runBlocking
@@ -90,31 +91,39 @@ class DataStoreRepositoryTest {
     val tempDir = createTempDirectory(prefix = "datastore-repo-test")
     try {
       val basePath = Path.of(tempDir.toString())
-      DataStoreFactory.create(serializer = SettingsSerializer) { basePath.resolve("settings.pb").toFile() }
-        .updateData { settings ->
-          settings
+      FileOutputStream(basePath.resolve("settings.pb").toFile()).use { output ->
+        SettingsSerializer.writeTo(
+          SettingsSerializer.defaultValue
             .toBuilder()
             .setTheme(Theme.THEME_DARK)
             .setIsTosAccepted(true)
             .setHasRunTinyGarden(true)
             .addTextInputHistory("persisted")
-            .build()
-        }
-      DataStoreFactory.create(serializer = UserDataSerializer) { basePath.resolve("user-data.pb").toFile() }
-        .updateData { userData ->
-          userData
+            .build(),
+          output,
+        )
+      }
+      FileOutputStream(basePath.resolve("user-data.pb").toFile()).use { output ->
+        UserDataSerializer.writeTo(
+          UserDataSerializer.defaultValue
             .toBuilder()
             .setAccessTokenData(
               com.google.ai.edge.gallery.proto.AccessTokenData.newBuilder()
                 .setAccessToken("stored")
                 .build()
             )
-            .build()
-        }
-      DataStoreFactory.create(serializer = BenchmarkResultsSerializer) {
-        basePath.resolve("benchmark-results.pb").toFile()
-      }.updateData { results ->
-        results.toBuilder().addResult(BenchmarkResult.newBuilder().build()).build()
+            .build(),
+          output,
+        )
+      }
+      FileOutputStream(basePath.resolve("benchmark-results.pb").toFile()).use { output ->
+        BenchmarkResultsSerializer.writeTo(
+          BenchmarkResultsSerializer.defaultValue
+            .toBuilder()
+            .addResult(BenchmarkResult.newBuilder().build())
+            .build(),
+          output,
+        )
       }
 
       val repository = createRepository(tempDir.toString())
