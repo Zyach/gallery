@@ -54,7 +54,7 @@ class DataStoreRepositoryTest {
 
       repository.clearAccessTokenData()
 
-      assertFalse(repository.readAccessTokenData()?.hasAccessToken() == true)
+      assertTrue(repository.readAccessTokenData()?.accessToken.orEmpty().isEmpty())
     } finally {
       tempDir.toFile().deleteRecursively()
     }
