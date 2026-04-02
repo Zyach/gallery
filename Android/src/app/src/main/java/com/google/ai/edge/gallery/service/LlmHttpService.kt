@@ -114,12 +114,10 @@ class LlmHttpService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   private fun pickDefaultLlmModel(): Model? {
-    val allowlist = allowlistModels()
-    val base = LlmHttpModelResolver.pickDefaultAllowedModel(allowlist)?.toModel() ?: return null
-
-    // If user imported model into __imports, prefer that path.
-    val imported = File(getExternalFilesDir(null), "__imports/gemma-3n-E2B-it-int4.litertlm")
-    return if (imported.exists()) base.copy(localModelFilePathOverride = imported.absolutePath) else base
+    return LlmHttpModelFactory.buildDefaultModel(
+      allowlist = allowlistModels(),
+      importsDir = File(getExternalFilesDir(null), "__imports"),
+    )
   }
 
   private fun readAllowlistFromExternalFiles(): ModelAllowlist? {
@@ -180,11 +178,10 @@ class LlmHttpService : Service() {
     if (allowed == null) return defaultModel
 
     return modelCache.getOrPut(allowed.name) {
-      val base = allowed.toModel()
-      val importsDir = File(getExternalFilesDir(null), "__imports")
-      val namedImport = File(importsDir, "${allowed.name}.litertlm")
-      if (namedImport.exists()) base.copy(localModelFilePathOverride = namedImport.absolutePath)
-      else base
+      LlmHttpModelFactory.buildAllowedModel(
+        allowedModel = allowed,
+        importsDir = File(getExternalFilesDir(null), "__imports"),
+      )
     }
   }
 
@@ -235,20 +232,21 @@ class LlmHttpService : Service() {
 
     override fun serve(session: IHTTPSession): Response {
       return try {
-        when (session.method) {
-          Method.GET -> when (session.uri) {
-            "/ping" -> okJsonText("{\"status\":\"ok\"}")
-            "/v1/models" -> requireAuth(session) ?: okJsonText(modelsPayload())
-            "/debug/models" -> requireAuth(session) ?: okJsonText(modelsPayload())
-            else -> notFound()
-          }
-          Method.POST -> when (session.uri) {
-            "/generate" -> requireAuth(session) ?: handleGenerate(session)
-            "/v1/chat/completions" -> requireAuth(session) ?: handleChatCompletion(session)
-            "/v1/responses" -> requireAuth(session) ?: handleResponses(session)
-            else -> notFound()
-          }
-          else -> methodNotAllowed()
+        if (!LlmHttpRouteResolver.isSupportedMethod(session.method)) {
+          return methodNotAllowed()
+        }
+
+        val route = LlmHttpRouteResolver.resolve(session.method, session.uri) ?: return notFound()
+        if (route.requiresAuth) {
+          requireAuth(session)?.let { return it }
+        }
+
+        when (route.handler) {
+          LlmHttpRouteHandler.PING -> okJsonText("{\"status\":\"ok\"}")
+          LlmHttpRouteHandler.MODELS -> okJsonText(modelsPayload())
+          LlmHttpRouteHandler.GENERATE -> handleGenerate(session)
+          LlmHttpRouteHandler.CHAT_COMPLETIONS -> handleChatCompletion(session)
+          LlmHttpRouteHandler.RESPONSES -> handleResponses(session)
         }
       } catch (t: Throwable) {
         jsonError(Response.Status.INTERNAL_ERROR, t.message ?: "internal_error")

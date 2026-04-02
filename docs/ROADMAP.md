@@ -35,6 +35,8 @@ Nota: el mantenimiento de workflows ya quedó adelantado frente al cutoff de Nod
 - [ ] Unificar allowlist app/servicio — iniciada
 - [ ] Estandarizar kotlinx.serialization (eliminar Gson del servicio) — iniciada
 
+Nota: `ARCH-01` ya incluye extracción incremental de resolver de modelos, model factory, renderer, DTOs/request adapter y route resolver del bridge.
+
 ### Fase D — Runtime y convergencia upstream
 - [ ] Completar migración runtimeHelper (cancelación/benchmark via helper) — iniciada
 - [ ] Convergencia por batches temáticos con upstream
