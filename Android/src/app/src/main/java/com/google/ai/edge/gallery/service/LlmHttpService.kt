@@ -21,6 +21,7 @@ import com.google.ai.edge.gallery.data.ModelAllowlistJson
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import fi.iki.elonen.NanoHTTPD
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
