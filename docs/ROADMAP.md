@@ -8,12 +8,12 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Age
 
 ## Pendiente
 
-- `SYNC-02c` Upstream sync: promo banner (`PromoBannerGm4`, `PromoScreenGm4`)
 - `BUILD-02` Release signing propio + minify
 - `THINK-02` Migrar `<think>` tag parsing a `message.channels["thought"]` (bloqueado — SDK no lo expone)
 
 ## Completado (resumen)
 
+- Promo banner Gemma 4, AppTitleGm4, modelo de navegación PromoScreen→Home (`SYNC-02c`)
 - AgentChat + Skills importables (WebView, 8 built-in skills, SkillManager) (`SYNC-02b`)
 - Litertlm 0.9.0 → 0.10.0 + versionCode 23 (`SYNC-02a`)
 - SSE streaming real token-by-token en `/v1/responses` (`STREAM-01`)
