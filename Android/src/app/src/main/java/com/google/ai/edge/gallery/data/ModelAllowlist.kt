@@ -24,13 +24,13 @@ import com.google.gson.annotations.SerializedName
 private const val TAG = "AGModelAllowlist"
 
 data class DefaultConfig(
-  @SerializedName("topK") val topK: Int?,
-  @SerializedName("topP") val topP: Float?,
-  @SerializedName("temperature") val temperature: Float?,
-  @SerializedName("accelerators") val accelerators: String?,
-  @SerializedName("visionAccelerator") val visionAccelerator: String?,
-  @SerializedName("maxContextLength") val maxContextLength: Int?,
-  @SerializedName("maxTokens") val maxTokens: Int?,
+  @SerializedName("topK") val topK: Int? = null,
+  @SerializedName("topP") val topP: Float? = null,
+  @SerializedName("temperature") val temperature: Float? = null,
+  @SerializedName("accelerators") val accelerators: String? = null,
+  @SerializedName("visionAccelerator") val visionAccelerator: String? = null,
+  @SerializedName("maxContextLength") val maxContextLength: Int? = null,
+  @SerializedName("maxTokens") val maxTokens: Int? = null,
 )
 
 /** A model file on HF for a specific SOC. */

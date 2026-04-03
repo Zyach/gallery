@@ -85,6 +85,8 @@ interface DataStoreRepository {
 
   fun deleteBenchmarkResult(index: Int)
 
+  fun setBenchmarkResults(results: List<BenchmarkResult>)
+
   /** Records that a promo with the specified ID has been viewed. */
   fun addViewedPromoId(promoId: String)
 
@@ -312,6 +314,14 @@ class DefaultDataStoreRepository(
       benchmarkResultsDataStore.updateData { results ->
         val newResults = results.toBuilder().removeResult(index).build()
         newResults
+      }
+    }
+  }
+
+  override fun setBenchmarkResults(results: List<BenchmarkResult>) {
+    runBlocking {
+      benchmarkResultsDataStore.updateData { existing ->
+        existing.toBuilder().clearResult().addAllResult(results).build()
       }
     }
   }
