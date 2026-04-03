@@ -2,12 +2,11 @@
 
 ## Propósito
 Google AI Edge Gallery — app Android para modelos on-device (fork/estudio).
-Version: 0.4.0-alpha. 65 tests JVM. CI verde.
+Version: 1.0.11 (en paridad con upstream). 65 tests JVM. CI verde.
 
 ## Documentación viva
 - Estado: `docs/STATE.md`
-- Roadmap: `docs/ROADMAP.md`
-- Backlog: `docs/backlog.md`
+- Roadmap + backlog: `docs/ROADMAP.md`
 - Divergencias: `docs/FORK_DIVERGENCES.md`
 
 ## Control plane (read-only)

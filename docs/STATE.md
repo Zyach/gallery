@@ -1,45 +1,36 @@
 # STATE — gallery fork
 
-> Ultima actualizacion: 2026-04-03.
-
-## Resumen
+> Última actualización: 2026-04-03
 
 Fork de [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery) para Android on-device AI. Añade un bridge HTTP local para Every Code y mejoras de calidad que upstream no tiene.
 
-**Version: 0.4.0-alpha** · **65 tests JVM** · **CI verde**
+**App version: 1.0.11** (en paridad con upstream) · **65 tests JVM** · **CI verde**
 
-## Qué tiene el fork que upstream no tiene
+## Qué añade este fork
 
-- **Bridge HTTP local** — servicio completo en `127.0.0.1` con auth, SSE, tool calls. 9 componentes extraídos, testeable.
-- **65 tests JVM** — upstream tiene cero tests.
-- **CI real** — tests + lint + debug + release + artifacts. Upstream solo hace `assembleRelease`.
-- **DataStoreRepository async** — eliminado `runBlocking` (upstream tiene TODO abierto `b/423700720`).
-- **Error handling corregido** — single-turn muestra errores (upstream los descarta), resetSession con max retries (upstream es infinito).
+| Capacidad | Detalle |
+|---|---|
+| **Bridge HTTP local** | Servicio en `127.0.0.1` — auth Bearer, SSE, tool calls. 9 componentes extraídos. |
+| **65 tests JVM** | Upstream tiene cero. 14 archivos de test en `src/test/`. |
+| **CI completo** | Tests + lint + debug/release + artifacts. Upstream solo hace `assembleRelease`. |
+| **DataStoreRepository async** | Eliminado `runBlocking` (upstream tiene TODO abierto `b/423700720`). |
+| **Error handling** | Errores visibles en single-turn; reset session con max retries. |
 
-## Qué tiene upstream que el fork no tiene
+## No adoptado de upstream
 
-- **Agent Chat + Skills** — sistema completo de skills importables, chat con herramientas, SkillManager.
-- **Thinking via SDK nativo** — `message.channels["thought"]` vs nuestro parsing de `<think>` tags.
-- **FCM push notifications** — `FcmMessagingService`.
-- **Promo/onboarding screens** — `PromoScreenGm4`, `PromoBannerGm4`.
-- **UI avanzada para agents** — `CollapsableProgressPanel`, `LogsViewer`, `MessageBodyWebview`.
-
-## Estado validado
-
-- CI verde: `Android APK` + `Android JVM Tests`.
-- E2E on-device: `/ping`, `/v1/models`, `/generate` con bearer token.
-- Node.js 24 adelantado en workflows.
+| Capacidad | Motivo |
+|---|---|
+| Agent Chat + Skills | Pendiente — requiere estabilizar bridge y runtime primero. |
+| Thinking via SDK nativo | Usando `ThinkingTagAccumulator` (`<think>` tags). Migración futura a `message.channels["thought"]`. |
 
 ## Gaps activos
 
 | ID | Descripción |
 |---|---|
-| ARCH-01 | Quedan handlers HTTP individuales y logging en `LlmHttpService` |
-| RUNTIME-01 | Migración runtime helper incompleta |
+| ARCH-01 | Handlers HTTP individuales y logging aún en `LlmHttpService` (pendiente extracción) |
 | STREAM-01 | SSE streaming real token-by-token pendiente |
 | BUILD-02 | Release signing propio + minify pendientes |
-| SYNC-01 | Agent Chat, Skills y thinking nativo de upstream no adoptados |
 
 ## Validación
 
-GitHub Actions es el gate primario. Ciclo E2E on-device cuando el cambio lo requiera.
+GitHub Actions es el gate primario (`build_android.yaml`). Ciclo E2E on-device (logcat vía Shizuku) cuando el cambio lo requiera.

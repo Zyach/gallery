@@ -1,35 +1,36 @@
 # ROADMAP — gallery fork
 
-> Ultima actualizacion: 2026-04-03.
+> Última actualización: 2026-04-03
 
 ## Objetivo
 
-Converger con upstream manteniendo el bridge HTTP local, Tiny Garden y las mejoras de calidad propias del fork.
+Mantener el bridge HTTP local operativo mientras se converge progresivamente con upstream. Adoptar Agent Chat/Skills cuando el bridge y runtime estén estables.
 
-## Tracks
+## Pendiente
 
-### 1. Bridge HTTP — en progreso
+### P1 — Próxima iteración
 
-SSE rendering e inference gateway ya extraídos. Quedan handlers HTTP y logging.
+- `ARCH-01` Extraer handlers HTTP y logging de `LlmHttpService` (completar arquitectura del bridge)
+- `SYNC-01` Evaluar adopción de Agent Chat / Skills de upstream
 
-### 2. Upstream sync — pendiente
+### P2 — Después
 
-Adoptar Agent Chat/Skills, thinking nativo (`message.channels["thought"]`) y UI de agents cuando el bridge y runtime estén estables. Trabajar en batches pequeños con CI verde entre cada uno.
+- `STREAM-01` SSE streaming real token-by-token
+- `BUILD-02` Release signing propio + minify
+- `THINK-02` Migrar de `<think>` tag parsing a `message.channels["thought"]` nativo
 
-### 3. Release readiness — pendiente
+## Completado
 
-SSE streaming real, signing propio, minify.
+- Upstream sync a v1.0.11 (GlobalModelManager, BenchmarkScreen, SOC/NPU filtering, FCM, agent UI components)
+- Bridge HTTP: loopback, auth Bearer, stateless, SSE, tool calls, JSON errors
+- Extracción bridge: InferenceGateway, ResponseRenderer, BodyParser, RouteResolver, ModelResolver, ModelFactory, RequestAdapter, BridgeUtils, ApiModels
+- DataStoreRepository sin `runBlocking`
+- Error handling: single-turn visible, reset session con max retries
+- 65 tests JVM (14 archivos)
+- CI: tests + lint + debug/release + artifacts
+- Thinking mode con `<think>` tag parsing
 
-## Hitos
+## Restricciones
 
-| Version | Criterio |
-|---|---|
-| 0.4.0-alpha | Estado actual: bridge hardened, 65 tests, CI real |
-| 0.5.0-beta | Bridge extraído, runtime convergido, upstream sync iniciado |
-| 1.0.0 | Agent Chat adoptado, SSE real, release signing, validación E2E completa |
-
-## Reglas de convergencia
-
-- Batches pequeños, CI verde entre cada uno.
-- No merge masivo de upstream ni rebase completo.
-- No romper bridge HTTP, no reintroducir chat history.
+- Batches pequeños, CI verde entre cada uno. No merge masivo ni rebase completo.
+- No romper bridge HTTP. No reintroducir chat history persistente.
