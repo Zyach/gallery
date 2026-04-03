@@ -89,3 +89,5 @@ import kotlinx.serialization.json.JsonElement
   val choices: List<ChatChoice>,
   val usage: Usage,
 )
+
+@Serializable data class GenReq(val prompt: String)

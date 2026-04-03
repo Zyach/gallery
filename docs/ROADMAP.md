@@ -10,8 +10,8 @@ Mantener el bridge HTTP local operativo mientras se converge progresivamente con
 
 ### P1 — Próxima iteración
 
-- `ARCH-01` Extraer handlers HTTP y logging de `LlmHttpService` (completar arquitectura del bridge)
-- `SYNC-01` Evaluar adopción de Agent Chat / Skills de upstream
+- `ARCH-01` ~~Extraer logging y allowlist loader de `LlmHttpService`~~ **completado**
+- ~~`SYNC-01` Evaluar adopción de Agent Chat / Skills de upstream~~ **cerrado** — upstream v1.0.11 no tiene Agent Chat/Skills
 
 ### P2 — Después
 
@@ -21,6 +21,7 @@ Mantener el bridge HTTP local operativo mientras se converge progresivamente con
 
 ## Completado
 
+- `ARCH-01` Extraer `LlmHttpLogger` y `LlmHttpAllowlistLoader` de `LlmHttpService` + tests; mover `GenReq` a ApiModels
 - Upstream sync a v1.0.11 (GlobalModelManager, BenchmarkScreen, SOC/NPU filtering, FCM, agent UI components)
 - Bridge HTTP: loopback, auth Bearer, stateless, SSE, tool calls, JSON errors
 - Extracción bridge: InferenceGateway, ResponseRenderer, BodyParser, RouteResolver, ModelResolver, ModelFactory, RequestAdapter, BridgeUtils, ApiModels
