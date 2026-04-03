@@ -14,20 +14,19 @@
 | `DataStoreRepository` sin `runBlocking` | `data/DataStoreRepository.kt` |
 | Errores visibles en single-turn; reset de sesión con max retries | `ui/llmchat/`, `ui/llmsingleturn/` |
 | Thinking via `<think>` tag parsing | `ThinkingTagAccumulator.kt` |
+| Agent Chat + Skills importables (WebView, built-in skills) | `customtasks/agentchat/` |
 
 ## No adoptado de upstream
 
 | Qué | Estado |
 |---|---|
-| Agent Chat + Skills importables | Planificado — requiere bridge estable |
-| Sistema de promo banners (`PromoBannerGm4`) | No evaluado |
-| Actualización de runtime litertlm | ✓ 0.10.0 adoptado |
+| Sistema de promo banners (`PromoBannerGm4`) | Planificado — SYNC-02c |
 | Thinking via SDK nativo (`message.channels["thought"]`) | Bloqueado — SDK no lo expone aún |
 
 ## Gaps activos
 
 | ID | Descripción |
 |---|---|
-| SYNC-02 | Upstream sync: litertlm + AgentChat + Skills + promo banner |
+| SYNC-02c | Upstream sync: promo banner (`PromoBannerGm4`, `PromoScreenGm4`) |
 | BUILD-02 | Release signing propio + minify |
 | THINK-02 | Migrar thinking de tag parsing a SDK nativo |
