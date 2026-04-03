@@ -46,7 +46,7 @@ data class AllowedModel(
   val name: String,
   val modelId: String,
   val modelFile: String,
-  val commitHash: String,
+  val commitHash: String = "",
   val description: String,
   val sizeInBytes: Long,
   val defaultConfig: DefaultConfig,
