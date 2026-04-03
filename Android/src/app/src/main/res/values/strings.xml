@@ -320,4 +320,8 @@
   <!-- Fork: LLM HTTP foreground service notification channel -->
   <string name="llm_http_channel_name" translatable="false">LLM HTTP</string>
 
+  <!-- Fork: TosDialog strings (used by SettingsDialog) -->
+  <string name="tos_dialog_title" translatable="false">Terms of Service</string>
+  <string name="tos_dialog_view_accept_button_label" translatable="false">Accept &amp; continue</string>
+
 </resources>
