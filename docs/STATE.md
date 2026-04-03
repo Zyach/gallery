@@ -2,35 +2,32 @@
 
 > Última actualización: 2026-04-03
 
-Fork de [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery) para Android on-device AI. Añade un bridge HTTP local para Every Code y mejoras de calidad que upstream no tiene.
+**Base:** upstream v1.0.11 · **Tests:** 89 JVM · **CI:** verde
 
-**App version: 1.0.11** (en paridad con upstream) · **65 tests JVM** · **CI verde**
+## Capacidades (fork añade)
 
-## Qué añade este fork
-
-| Capacidad | Detalle |
+| Qué | Dónde |
 |---|---|
-| **Bridge HTTP local** | Servicio en `127.0.0.1` — auth Bearer, SSE, tool calls. 9 componentes extraídos. |
-| **65 tests JVM** | Upstream tiene cero. 14 archivos de test en `src/test/`. |
-| **CI completo** | Tests + lint + debug/release + artifacts. Upstream solo hace `assembleRelease`. |
-| **DataStoreRepository async** | Eliminado `runBlocking` (upstream tiene TODO abierto `b/423700720`). |
-| **Error handling** | Errores visibles en single-turn; reset session con max retries. |
+| HTTP bridge — API compatible OpenAI, auth Bearer, SSE real, tool calls | `service/` (12 archivos) |
+| 89 tests JVM unitarios | `src/test/` (16 archivos) |
+| CI: tests + lint + APK artifacts | `.github/workflows/` |
+| `DataStoreRepository` sin `runBlocking` | `data/DataStoreRepository.kt` |
+| Errores visibles en single-turn; reset de sesión con max retries | `ui/llmchat/`, `ui/llmsingleturn/` |
+| Thinking via `<think>` tag parsing | `ThinkingTagAccumulator.kt` |
 
 ## No adoptado de upstream
 
-| Capacidad | Motivo |
+| Qué | Estado |
 |---|---|
-| Agent Chat + Skills | Pendiente — requiere estabilizar bridge y runtime primero. |
-| Thinking via SDK nativo | Usando `ThinkingTagAccumulator` (`<think>` tags). Migración futura a `message.channels["thought"]`. |
+| Agent Chat + Skills importables | Planificado — requiere bridge estable |
+| Sistema de promo banners (`PromoBannerGm4`) | No evaluado |
+| Actualización de runtime litertlm | Pendiente |
+| Thinking via SDK nativo (`message.channels["thought"]`) | Bloqueado — SDK no lo expone aún |
 
 ## Gaps activos
 
 | ID | Descripción |
 |---|---|
-| ARCH-01 | Handlers HTTP individuales y logging aún en `LlmHttpService` (pendiente extracción) |
-| STREAM-01 | SSE streaming real token-by-token pendiente |
-| BUILD-02 | Release signing propio + minify pendientes |
-
-## Validación
-
-GitHub Actions es el gate primario (`build_android.yaml`). Ciclo E2E on-device (logcat vía Shizuku) cuando el cambio lo requiera.
+| SYNC-02 | Upstream sync: litertlm + AgentChat + Skills + promo banner |
+| BUILD-02 | Release signing propio + minify |
+| THINK-02 | Migrar thinking de tag parsing a SDK nativo |

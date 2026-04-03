@@ -1,4 +1,3 @@
-The repository is not currently ready for code contributions. We will
-make a separate announcement when we are ready for OSS users to make
-contributions to it.
+Este es un fork personal. No se aceptan contribuciones externas.
 
+Para el proyecto original ver [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery).

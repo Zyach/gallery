@@ -1,8 +1,8 @@
 # AGENTS.md — gallery (Project Agent)
 
 ## Propósito
-Google AI Edge Gallery — app Android para modelos on-device (fork/estudio).
-Version: 1.0.11 (en paridad con upstream). 65 tests JVM. CI verde.
+Google AI Edge Gallery — app Android para modelos on-device (fork).
+Base: upstream v1.0.11. 89 tests JVM. CI verde.
 
 ## Documentación viva
 - Estado: `docs/STATE.md`

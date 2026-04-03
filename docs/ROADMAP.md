@@ -4,29 +4,24 @@
 
 ## Objetivo
 
-Mantener el bridge HTTP local operativo mientras se converge progresivamente con upstream. Adoptar Agent Chat/Skills cuando el bridge y runtime estén estables.
+Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Agent Chat/Skills cuando el bridge y runtime estén estables.
 
 ## Pendiente
 
-### P2 — Próxima iteración
-
+- `SYNC-02` Upstream sync: actualización litertlm + AgentChat + Skills + promo banner
 - `BUILD-02` Release signing propio + minify
-- `THINK-02` Migrar de `<think>` tag parsing a `message.channels["thought"]` nativo
+- `THINK-02` Migrar `<think>` tag parsing a `message.channels["thought"]` (bloqueado — SDK no lo expone)
 
-## Completado
+## Completado (resumen)
 
-- `STREAM-01` SSE streaming real token-by-token en `/v1/responses` vía `PipedOutputStream` + `executeStreaming()` en `LlmHttpInferenceGateway`
-- `ARCH-01` Extraer `LlmHttpLogger` y `LlmHttpAllowlistLoader` de `LlmHttpService` + tests; mover `GenReq` a ApiModels
-- Upstream sync a v1.0.11 (GlobalModelManager, BenchmarkScreen, SOC/NPU filtering, FCM, agent UI components)
-- Bridge HTTP: loopback, auth Bearer, stateless, SSE, tool calls, JSON errors
-- Extracción bridge: InferenceGateway, ResponseRenderer, BodyParser, RouteResolver, ModelResolver, ModelFactory, RequestAdapter, BridgeUtils, ApiModels
-- DataStoreRepository sin `runBlocking`
-- Error handling: single-turn visible, reset session con max retries
-- 65 tests JVM (14 archivos)
-- CI: tests + lint + debug/release + artifacts
-- Thinking mode con `<think>` tag parsing
+- SSE streaming real token-by-token en `/v1/responses` (`STREAM-01`)
+- Extracción de `LlmHttpLogger` y `LlmHttpAllowlistLoader` + tests (`ARCH-01`)
+- Upstream sync a v1.0.11 (GlobalModelManager, BenchmarkScreen, filtrado SOC/NPU, FCM)
+- HTTP bridge: loopback, auth Bearer, SSE, tool calls, stateless
+- 89 tests JVM (16 archivos), CI verde
+- `DataStoreRepository` async, thinking mode, error handling
 
 ## Restricciones
 
-- Batches pequeños, CI verde entre cada uno. No merge masivo ni rebase completo.
-- No romper bridge HTTP. No reintroducir chat history persistente.
+- Batches pequeños, CI verde entre cada uno. Sin merge masivo ni rebase completo.
+- No romper el bridge HTTP. No reintroducir chat history persistente.

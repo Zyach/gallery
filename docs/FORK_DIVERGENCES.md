@@ -6,23 +6,25 @@
 
 | Capacidad | Archivos clave |
 |---|---|
-| Bridge HTTP local en `127.0.0.1` — auth Bearer, SSE, tool calls | `service/LlmHttpService.kt` + 8 helpers |
-| 65 tests JVM | `src/test/` (14 archivos) |
-| CI con tests, lint, artifacts | `.github/workflows/build_android.yaml` |
-| `DataStoreRepository` async (sin `runBlocking`) | `data/DataStoreRepository.kt` |
+| HTTP bridge en `127.0.0.1:9006` — API compatible OpenAI, auth Bearer, SSE real token-by-token, tool calls | `service/` (12 archivos) |
+| 89 tests JVM | `src/test/` (16 archivos) |
+| CI: tests + lint + APK artifacts | `.github/workflows/` |
+| `DataStoreRepository` sin `runBlocking` | `data/DataStoreRepository.kt` |
 | Error visible en single-turn | `ui/llmsingleturn/LlmSingleTurnViewModel.kt` |
-| Reset session con max retries | `ui/llmchat/LlmChatViewModel.kt` |
-| Thinking via `<think>` tag parsing | `ui/llmchat/LlmChatModelHelper.kt`, `ThinkingTagAccumulator.kt` |
+| Reset de sesión con max retries | `ui/llmchat/LlmChatViewModel.kt` |
+| Thinking via `<think>` tag parsing | `ThinkingTagAccumulator.kt`, `ui/llmchat/LlmChatModelHelper.kt` |
 
 ## No adoptado de upstream
 
 | Capacidad | Notas |
 |---|---|
-| Agent Chat + Skills | `customtasks/agentchat/`, `SkillAllowlist`, `SkillsSerializer` — adopción futura |
+| Agent Chat + Skills | `customtasks/agentchat/` (~30 archivos) — adopción futura |
+| Sistema de promo banners | `PromoBannerGm4` en `GlobalModelManager` — no evaluado |
+| Actualización runtime litertlm | Versión más reciente pendiente de adoptar |
 | Thinking via SDK nativo | `message.channels["thought"]` — más robusto que tag parsing; migración futura |
 
 ## Decisiones de diseño
 
-- **Bridge HTTP** es la razón principal del fork. Siempre se preserva.
-- **Chat history persistente** no se reintroduce (upstream tampoco lo tiene).
-- **Tiny Garden** se preserva.
+- El **bridge HTTP** es la razón principal del fork. Siempre se preserva.
+- El **chat history persistente** no se reintroduce.
+- La tarea **Tiny Garden** se preserva.
