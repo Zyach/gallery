@@ -21,7 +21,7 @@
 |---|---|
 | Agent Chat + Skills importables | Planificado — requiere bridge estable |
 | Sistema de promo banners (`PromoBannerGm4`) | No evaluado |
-| Actualización de runtime litertlm | Pendiente |
+| Actualización de runtime litertlm | ✓ 0.10.0 adoptado |
 | Thinking via SDK nativo (`message.channels["thought"]`) | Bloqueado — SDK no lo expone aún |
 
 ## Gaps activos

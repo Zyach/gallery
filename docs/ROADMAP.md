@@ -8,12 +8,14 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Age
 
 ## Pendiente
 
-- `SYNC-02` Upstream sync: actualización litertlm + AgentChat + Skills + promo banner
+- `SYNC-02b` Upstream sync: AgentChat + Skills (30+ archivos, DI, proto)
+- `SYNC-02c` Upstream sync: promo banner (`PromoBannerGm4`, `PromoScreenGm4`)
 - `BUILD-02` Release signing propio + minify
 - `THINK-02` Migrar `<think>` tag parsing a `message.channels["thought"]` (bloqueado — SDK no lo expone)
 
 ## Completado (resumen)
 
+- Litertlm 0.9.0 → 0.10.0 + versionCode 23 (`SYNC-02a`)
 - SSE streaming real token-by-token en `/v1/responses` (`STREAM-01`)
 - Extracción de `LlmHttpLogger` y `LlmHttpAllowlistLoader` + tests (`ARCH-01`)
 - Upstream sync a v1.0.11 (GlobalModelManager, BenchmarkScreen, filtrado SOC/NPU, FCM)
