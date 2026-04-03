@@ -17,11 +17,9 @@
 package com.google.ai.edge.gallery.ui.common.tos
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.data.DataStoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.launch
 
 /** ViewModel responsible for managing terms of services related tasks. */
 @HiltViewModel
@@ -32,6 +30,14 @@ open class TosViewModel @Inject constructor(private val dataStoreRepository: Dat
   }
 
   fun acceptTos() {
-    viewModelScope.launch { dataStoreRepository.acceptTos() }
+    dataStoreRepository.acceptTos()
+  }
+
+  fun getIsGemmaTermsOfUseAccepted(): Boolean {
+    return dataStoreRepository.isGemmaTermsOfUseAccepted()
+  }
+
+  fun acceptGemmaTermsOfUse() {
+    dataStoreRepository.acceptGemmaTermsOfUse()
   }
 }

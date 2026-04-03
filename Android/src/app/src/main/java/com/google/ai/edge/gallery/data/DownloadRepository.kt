@@ -30,7 +30,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.os.bundleOf
-import androidx.lifecycle.Observer
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -38,6 +37,7 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.google.ai.edge.gallery.AppLifecycleProvider
+import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.worker.DownloadWorker
@@ -52,7 +52,7 @@ data class AGWorkInfo(val taskId: String, val modelName: String, val workId: Str
 
 interface DownloadRepository {
   fun downloadModel(
-    task: Task,
+    task: Task?,
     model: Model,
     onStatusUpdated: (model: Model, status: ModelDownloadStatus) -> Unit,
   )
@@ -63,11 +63,13 @@ interface DownloadRepository {
 
   fun observerWorkerProgress(
     workerId: UUID,
-    task: Task,
+    task: Task?,
     model: Model,
     onStatusUpdated: (model: Model, status: ModelDownloadStatus) -> Unit,
   )
 }
+
+private const val DOWNLOAD_FROM_GLOBAL_MODEL_MANAGER_TASK_ID = "___"
 
 /**
  * Repository for managing model downloads using WorkManager.
@@ -92,7 +94,7 @@ class DefaultDownloadRepository(
     context.getSharedPreferences("download_start_time_ms", Context.MODE_PRIVATE)
 
   override fun downloadModel(
-    task: Task,
+    task: Task?,
     model: Model,
     onStatusUpdated: (model: Model, status: ModelDownloadStatus) -> Unit,
   ) {
@@ -129,7 +131,7 @@ class DefaultDownloadRepository(
         .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
         .setInputData(inputData)
         .addTag("$MODEL_NAME_TAG:${model.name}")
-        .addTag("$TASK_ID_TAG:${task.id}")
+        .addTag("$TASK_ID_TAG:${task?.id ?: ""}")
         .build()
 
     val workerId = downloadWorkRequest.id
@@ -159,25 +161,19 @@ class DefaultDownloadRepository(
 
   override fun observerWorkerProgress(
     workerId: UUID,
-    task: Task,
+    task: Task?,
     model: Model,
     onStatusUpdated: (model: Model, status: ModelDownloadStatus) -> Unit,
   ) {
-    val liveData = workManager.getWorkInfoByIdLiveData(workerId)
-    lateinit var observer: Observer<WorkInfo?>
-    observer =
-      Observer { workInfo ->
-        if (workInfo == null) {
-          return@Observer
-        }
-
+    workManager.getWorkInfoByIdLiveData(workerId).observeForever { workInfo ->
+      if (workInfo != null) {
         when (workInfo.state) {
           WorkInfo.State.ENQUEUED -> {
             downloadStartTimeSharedPreferences.edit {
               putLong(model.name, System.currentTimeMillis())
             }
             firebaseAnalytics?.logEvent(
-              "model_download",
+              GalleryEvent.MODEL_DOWNLOAD.id,
               bundleOf("event_type" to "start", "model_id" to model.name),
             )
           }
@@ -215,14 +211,14 @@ class DefaultDownloadRepository(
             sendNotification(
               title = context.getString(R.string.notification_title_success),
               text = context.getString(R.string.notification_content_success).format(model.name),
-              taskId = task.id,
+              taskId = task?.id ?: DOWNLOAD_FROM_GLOBAL_MODEL_MANAGER_TASK_ID,
               modelName = model.name,
             )
 
             val startTime = downloadStartTimeSharedPreferences.getLong(model.name, 0L)
             val duration = System.currentTimeMillis() - startTime
             firebaseAnalytics?.logEvent(
-              "model_download",
+              GalleryEvent.MODEL_DOWNLOAD.id,
               bundleOf(
                 "event_type" to "success",
                 "model_id" to model.name,
@@ -230,7 +226,6 @@ class DefaultDownloadRepository(
               ),
             )
             downloadStartTimeSharedPreferences.edit { remove(model.name) }
-            liveData.removeObserver(observer)
           }
 
           WorkInfo.State.FAILED,
@@ -260,7 +255,7 @@ class DefaultDownloadRepository(
             val duration = System.currentTimeMillis() - startTime
             // TODO: Add failure reasons
             firebaseAnalytics?.logEvent(
-              "model_download",
+              GalleryEvent.MODEL_DOWNLOAD.id,
               bundleOf(
                 "event_type" to "failure",
                 "model_id" to model.name,
@@ -268,14 +263,12 @@ class DefaultDownloadRepository(
               ),
             )
             downloadStartTimeSharedPreferences.edit { remove(model.name) }
-            liveData.removeObserver(observer)
           }
 
           else -> {}
         }
       }
-
-    liveData.observeForever(observer)
+    }
   }
 
   private fun sendNotification(title: String, text: String, taskId: String, modelName: String) {
@@ -299,7 +292,14 @@ class DefaultDownloadRepository(
     if (taskId.isEmpty()) {
       // If taskId is empty, it's a failed download. Just open the app's main screen.
       intent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+    }
+    // Download from global model manager. Open the global model manager screen.
+    else if (taskId == DOWNLOAD_FROM_GLOBAL_MODEL_MANAGER_TASK_ID) {
+      intent =
+        Intent(Intent.ACTION_VIEW, "com.google.ai.edge.gallery://global_model_manager".toUri())
+          .apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
     } else {
+
       // Otherwise, create the deep link as before.
       intent =
         Intent(

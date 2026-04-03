@@ -16,7 +16,6 @@
 
 package com.google.ai.edge.gallery.ui.llmchat
 
-import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
@@ -27,11 +26,9 @@ import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
 import com.google.ai.edge.gallery.data.DEFAULT_TEMPERATURE
 import com.google.ai.edge.gallery.data.DEFAULT_TOPK
 import com.google.ai.edge.gallery.data.DEFAULT_TOPP
+import com.google.ai.edge.gallery.data.DEFAULT_VISION_ACCELERATOR
 import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.gallery.runtime.CleanUpListener
-import com.google.ai.edge.gallery.runtime.BenchmarkConfig
-import com.google.ai.edge.gallery.runtime.BenchmarkRunResult
 import com.google.ai.edge.gallery.runtime.LlmModelHelper
 import com.google.ai.edge.gallery.runtime.ResultListener
 import com.google.ai.edge.litertlm.Backend
@@ -47,51 +44,17 @@ import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
-import com.google.ai.edge.litertlm.benchmark
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
-import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
-private const val LOW_MEM_MAX_TOKENS = 512
-private const val LOW_MEM_THRESHOLD_FRACTION = 0.15
-private const val LOW_MEM_MIN_BYTES = 768L * 1024L * 1024L
-private const val LOW_MEM_MAX_BYTES = 1536L * 1024L * 1024L
 
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
 object LlmChatModelHelper : LlmModelHelper {
   // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
-
-  private fun isLowMemory(context: Context): Boolean {
-    val activityManager =
-      context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
-    val memoryInfo = ActivityManager.MemoryInfo()
-    activityManager.getMemoryInfo(memoryInfo)
-    val threshold = lowMemThresholdBytes(memoryInfo)
-    val lowByAvail = memoryInfo.availMem < threshold
-    if (lowByAvail) {
-      Log.w(
-        TAG,
-        "Low memory detected. avail=${memoryInfo.availMem} threshold=$threshold total=${memoryInfo.totalMem}",
-      )
-    }
-    return activityManager.isLowRamDevice || memoryInfo.lowMemory || lowByAvail
-  }
-
-  private fun lowMemThresholdBytes(memoryInfo: ActivityManager.MemoryInfo): Long {
-    val percentThreshold = (memoryInfo.totalMem * LOW_MEM_THRESHOLD_FRACTION).toLong()
-    return percentThreshold.coerceIn(LOW_MEM_MIN_BYTES, LOW_MEM_MAX_BYTES)
-  }
-
-  private fun modelSupportsAccelerator(model: Model, accelerator: Accelerator): Boolean {
-    val config =
-      model.configs.filterIsInstance<SegmentedButtonConfig>()
-        .firstOrNull { it.key == ConfigKeys.ACCELERATOR }
-    return config?.options?.contains(accelerator.label) == true
-  }
 
   @OptIn(ExperimentalApi::class) // opt-in experimental flags
   override fun initialize(
@@ -105,52 +68,6 @@ object LlmChatModelHelper : LlmModelHelper {
     enableConversationConstrainedDecoding: Boolean,
     coroutineScope: CoroutineScope?,
   ) {
-    initializeInternal(
-      context = context,
-      model = model,
-      supportImage = supportImage,
-      supportAudio = supportAudio,
-      onDone = onDone,
-      systemInstruction = systemInstruction,
-      tools = tools,
-      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
-    )
-  }
-
-  @OptIn(ExperimentalApi::class) // compatibility overload for older call sites
-  fun initialize(
-    context: Context,
-    model: Model,
-    supportImage: Boolean,
-    supportAudio: Boolean,
-    onDone: (String) -> Unit,
-    systemMessage: Message? = null,
-    tools: List<Any> = listOf(),
-    enableConversationConstrainedDecoding: Boolean = false,
-  ) {
-    initializeInternal(
-      context = context,
-      model = model,
-      supportImage = supportImage,
-      supportAudio = supportAudio,
-      onDone = onDone,
-      systemInstruction = systemMessage?.let { Contents.of(it.toString()) },
-      tools = tools.filterIsInstance<ToolProvider>(),
-      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
-    )
-  }
-
-  @OptIn(ExperimentalApi::class)
-  private fun initializeInternal(
-    context: Context,
-    model: Model,
-    supportImage: Boolean,
-    supportAudio: Boolean,
-    onDone: (String) -> Unit,
-    systemInstruction: Contents?,
-    tools: List<ToolProvider>,
-    enableConversationConstrainedDecoding: Boolean,
-  ) {
     // Prepare options.
     val maxTokens =
       model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN)
@@ -160,93 +77,49 @@ object LlmChatModelHelper : LlmModelHelper {
       model.getFloatConfigValue(key = ConfigKeys.TEMPERATURE, defaultValue = DEFAULT_TEMPERATURE)
     val accelerator =
       model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = Accelerator.GPU.label)
-    val isLowMemory = isLowMemory(context)
-    val effectiveMaxTokens = if (isLowMemory) min(maxTokens, LOW_MEM_MAX_TOKENS) else maxTokens
-    if (effectiveMaxTokens != maxTokens) {
-      Log.w(TAG, "Low memory detected. Reducing max tokens from $maxTokens to $effectiveMaxTokens")
-    }
-    val supportsCpu = modelSupportsAccelerator(model, Accelerator.CPU)
-    val supportsGpu = modelSupportsAccelerator(model, Accelerator.GPU)
-    val supportsNpu = modelSupportsAccelerator(model, Accelerator.NPU)
-    val fallbackEnabled =
-      com.google.ai.edge.gallery.data.LlmHttpPrefs.isAcceleratorFallbackEnabled(context)
-    val effectiveAccelerator =
-      if (fallbackEnabled && isLowMemory && accelerator == Accelerator.GPU.label && supportsCpu) {
-        Log.w(TAG, "Low memory detected. Falling back from GPU to CPU backend")
-        Accelerator.CPU.label
-      } else {
-        accelerator
+    val visionAccelerator =
+      model.getStringConfigValue(
+        key = ConfigKeys.VISION_ACCELERATOR,
+        defaultValue = DEFAULT_VISION_ACCELERATOR.label,
+      )
+    val visionBackend =
+      when (visionAccelerator) {
+        Accelerator.CPU.label -> Backend.CPU()
+        Accelerator.GPU.label -> Backend.GPU()
+        Accelerator.NPU.label ->
+          Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+        else -> Backend.GPU()
       }
-    Log.d(TAG, "Initializing...")
     val shouldEnableImage = supportImage
     val shouldEnableAudio = supportAudio
-    Log.d(TAG, "Enable image: $shouldEnableImage, enable audio: $shouldEnableAudio")
-    val preferredOrder =
-      when (effectiveAccelerator) {
+    val preferredBackend =
+      when (accelerator) {
+        Accelerator.CPU.label -> Backend.CPU()
+        Accelerator.GPU.label -> Backend.GPU()
         Accelerator.NPU.label ->
-          if (fallbackEnabled) {
-            listOf(
-              Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir),
-              Backend.GPU(),
-              Backend.CPU(),
-            )
-          } else {
-            listOf(Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir))
-          }
-        Accelerator.GPU.label ->
-          if (fallbackEnabled) listOf(Backend.GPU(), Backend.CPU()) else listOf(Backend.GPU())
-        else -> listOf(Backend.CPU())
+          Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+        else -> Backend.CPU()
       }
-    val supportedOrder =
-      if (fallbackEnabled) {
-        preferredOrder.filter {
-          when (it) {
-            is Backend.NPU -> supportsNpu
-            is Backend.GPU -> supportsGpu
-            is Backend.CPU -> supportsCpu
-            else -> false
-          }
-        }.ifEmpty { listOf(Backend.CPU()) }
-      } else {
-        preferredOrder
-      }
-    Log.d(TAG, "Preferred backend order: $supportedOrder")
+    Log.d(TAG, "Preferred backend: $preferredBackend")
 
     val modelPath = model.getPath(context = context)
-    // Create an instance of LiteRT LM engine and conversation with backend fallback.
+    val engineConfig =
+      EngineConfig(
+        modelPath = modelPath,
+        backend = preferredBackend,
+        visionBackend = if (shouldEnableImage) visionBackend else null, // must be GPU for Gemma 3n
+        audioBackend = if (shouldEnableAudio) Backend.CPU() else null, // must be CPU for Gemma 3n
+        maxNumTokens = maxTokens,
+        cacheDir =
+          if (modelPath.startsWith("/data/local/tmp"))
+            context.getExternalFilesDir(null)?.absolutePath
+          else null,
+      )
+
+    // Create an instance of LiteRT LM engine and conversation.
     try {
-      var lastError: Exception? = null
-      var engine: Engine? = null
-      var usedBackend: Backend? = null
-      for (backend in supportedOrder) {
-        try {
-          val engineConfig =
-            EngineConfig(
-              modelPath = modelPath,
-              backend = backend,
-              visionBackend = if (shouldEnableImage) Backend.GPU() else null,
-              audioBackend = if (shouldEnableAudio) Backend.CPU() else null,
-              maxNumTokens = effectiveMaxTokens,
-              cacheDir =
-                if (modelPath.startsWith("/data/local/tmp"))
-                  context.getExternalFilesDir(null)?.absolutePath
-                else null,
-            )
-          val candidate = Engine(engineConfig)
-          candidate.initialize()
-          engine = candidate
-          usedBackend = backend
-          break
-        } catch (e: Exception) {
-          lastError = e
-          Log.w(TAG, "Backend $backend failed, trying next...", e)
-        }
-      }
-      if (engine == null) {
-        onDone(cleanUpMediapipeTaskErrorMessage(lastError?.message ?: "Unknown error"))
-        return
-      }
-      Log.d(TAG, "Using backend: $usedBackend")
+      val engine = Engine(engineConfig)
+      engine.initialize()
 
       ExperimentalFlags.enableConversationConstrainedDecoding =
         enableConversationConstrainedDecoding
@@ -254,11 +127,15 @@ object LlmChatModelHelper : LlmModelHelper {
         engine.createConversation(
           ConversationConfig(
             samplerConfig =
-              SamplerConfig(
-                topK = topK,
-                topP = topP.toDouble(),
-                temperature = temperature.toDouble(),
-              ),
+              if (preferredBackend is Backend.NPU) {
+                null
+              } else {
+                SamplerConfig(
+                  topK = topK,
+                  topP = topP.toDouble(),
+                  temperature = temperature.toDouble(),
+                )
+              },
             systemInstruction = systemInstruction,
             tools = tools,
           )
@@ -281,44 +158,6 @@ object LlmChatModelHelper : LlmModelHelper {
     tools: List<ToolProvider>,
     enableConversationConstrainedDecoding: Boolean,
   ) {
-    resetConversationInternal(
-      model = model,
-      supportImage = supportImage,
-      supportAudio = supportAudio,
-      systemInstruction = systemInstruction,
-      tools = tools,
-      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
-    )
-  }
-
-  @OptIn(ExperimentalApi::class) // compatibility overload for older call sites
-  fun resetConversation(
-    model: Model,
-    supportImage: Boolean,
-    supportAudio: Boolean,
-    systemMessage: Message? = null,
-    tools: List<Any> = listOf(),
-    enableConversationConstrainedDecoding: Boolean = false,
-  ) {
-    resetConversationInternal(
-      model = model,
-      supportImage = supportImage,
-      supportAudio = supportAudio,
-      systemInstruction = systemMessage?.let { Contents.of(it.toString()) },
-      tools = tools.filterIsInstance<ToolProvider>(),
-      enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
-    )
-  }
-
-  @OptIn(ExperimentalApi::class)
-  private fun resetConversationInternal(
-    model: Model,
-    supportImage: Boolean,
-    supportAudio: Boolean,
-    systemInstruction: Contents?,
-    tools: List<ToolProvider>,
-    enableConversationConstrainedDecoding: Boolean,
-  ) {
     try {
       Log.d(TAG, "Resetting conversation for model '${model.name}'")
 
@@ -334,17 +173,26 @@ object LlmChatModelHelper : LlmModelHelper {
       val shouldEnableAudio = supportAudio
       Log.d(TAG, "Enable image: $shouldEnableImage, enable audio: $shouldEnableAudio")
 
+      val accelerator =
+        model.getStringConfigValue(
+          key = ConfigKeys.ACCELERATOR,
+          defaultValue = Accelerator.GPU.label,
+        )
       ExperimentalFlags.enableConversationConstrainedDecoding =
         enableConversationConstrainedDecoding
       val newConversation =
         engine.createConversation(
           ConversationConfig(
             samplerConfig =
-              SamplerConfig(
-                topK = topK,
-                topP = topP.toDouble(),
-                temperature = temperature.toDouble(),
-              ),
+              if (accelerator == Accelerator.NPU.label) {
+                null
+              } else {
+                SamplerConfig(
+                  topK = topK,
+                  topP = topP.toDouble(),
+                  temperature = temperature.toDouble(),
+                )
+              },
             systemInstruction = systemInstruction,
             tools = tools,
           )
@@ -387,6 +235,11 @@ object LlmChatModelHelper : LlmModelHelper {
     Log.d(TAG, "Clean up done.")
   }
 
+  override fun stopResponse(model: Model) {
+    val instance = model.instance as? LlmModelInstance ?: return
+    instance.conversation.cancelProcess()
+  }
+
   override fun runInference(
     model: Model,
     input: String,
@@ -398,7 +251,11 @@ object LlmChatModelHelper : LlmModelHelper {
     coroutineScope: CoroutineScope?,
     extraContext: Map<String, String>?,
   ) {
-    val instance = model.instance as LlmModelInstance
+    val instance = model.instance as? LlmModelInstance
+    if (instance == null) {
+      onError("LlmModelInstance is not initialized.")
+      return
+    }
 
     // Set listener.
     if (!cleanUpListeners.containsKey(model.name)) {
@@ -419,37 +276,14 @@ object LlmChatModelHelper : LlmModelHelper {
       contents.add(Content.Text(input))
     }
 
-    val thinkingEnabled = extraContext?.get("enable_thinking") == "true"
-    val thinkingAccumulator = if (thinkingEnabled) ThinkingTagAccumulator() else null
-
     conversation.sendMessageAsync(
-      Message.of(contents),
+      Contents.of(contents),
       object : MessageCallback {
         override fun onMessage(message: Message) {
-          if (!thinkingEnabled) {
-            resultListener(message.toString(), false, null)
-            return
-          }
-
-          thinkingAccumulator?.consume(message.toString())?.forEach { chunk ->
-            if (chunk.text.isNotEmpty()) {
-              resultListener(chunk.text, false, null)
-            }
-            if (chunk.thinking.isNotEmpty()) {
-              resultListener("", false, chunk.thinking)
-            }
-          }
+          resultListener(message.toString(), false, null)
         }
 
         override fun onDone() {
-          thinkingAccumulator?.finish()?.let { chunk ->
-            if (chunk.text.isNotEmpty()) {
-              resultListener(chunk.text, false, null)
-            }
-            if (chunk.thinking.isNotEmpty()) {
-              resultListener("", false, chunk.thinking)
-            }
-          }
           resultListener("", true, null)
         }
 
@@ -466,62 +300,9 @@ object LlmChatModelHelper : LlmModelHelper {
     )
   }
 
-  fun runInference(
-    model: Model,
-    input: String,
-    resultListener: (partialResult: String, done: Boolean) -> Unit,
-    cleanUpListener: CleanUpListener,
-    onError: (message: String) -> Unit = {},
-    images: List<Bitmap> = listOf(),
-    audioClips: List<ByteArray> = listOf(),
-  ) {
-    runInference(
-      model = model,
-      input = input,
-      resultListener = { partialResult, done, _ -> resultListener(partialResult, done) },
-      cleanUpListener = cleanUpListener,
-      onError = onError,
-      images = images,
-      audioClips = audioClips,
-    )
-  }
-
   private fun Bitmap.toPngByteArray(): ByteArray {
     val stream = ByteArrayOutputStream()
     this.compress(Bitmap.CompressFormat.PNG, 100, stream)
     return stream.toByteArray()
-  }
-
-  override fun stopResponse(model: Model) {
-    val instance = model.instance as? LlmModelInstance ?: return
-    instance.conversation.cancelProcess()
-  }
-
-  @OptIn(ExperimentalApi::class)
-  override fun runBenchmark(
-    context: Context,
-    model: Model,
-    config: BenchmarkConfig,
-  ): BenchmarkRunResult {
-    val backend: Backend =
-      when (config.accelerator.lowercase()) {
-        "gpu" -> Backend.GPU()
-        "npu" -> Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
-        else -> Backend.CPU()
-      }
-    val benchmarkInfo =
-      benchmark(
-        modelPath = model.getPath(context = context),
-        backend = backend,
-        prefillTokens = config.prefillTokens,
-        decodeTokens = config.decodeTokens,
-        cacheDir = config.cacheDir,
-      )
-    return BenchmarkRunResult(
-      initTimeMs = benchmarkInfo.initTimeInSecond * 1000.0,
-      prefillTokensPerSecond = benchmarkInfo.lastPrefillTokensPerSecond,
-      decodeTokensPerSecond = benchmarkInfo.lastDecodeTokensPerSecond,
-      timeToFirstTokenSeconds = benchmarkInfo.timeToFirstTokenInSecond,
-    )
   }
 }

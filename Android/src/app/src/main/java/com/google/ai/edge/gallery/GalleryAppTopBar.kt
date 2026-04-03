@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,7 +55,6 @@ fun GalleryTopAppBar(
   modifier: Modifier = Modifier,
   leftAction: AppBarAction? = null,
   rightAction: AppBarAction? = null,
-  secondaryRightAction: AppBarAction? = null,
   scrollBehavior: TopAppBarScrollBehavior? = null,
   subtitle: String = "",
 ) {
@@ -105,33 +105,38 @@ fun GalleryTopAppBar(
             )
           }
         }
+        AppBarActionType.MENU -> {
+          IconButton(onClick = leftAction.actionFn) {
+            Icon(
+              imageVector = Icons.Rounded.Menu,
+              contentDescription = stringResource(R.string.cd_menu),
+            )
+          }
+        }
 
         else -> {}
       }
     },
     // The "action" component at the right.
     actions = {
-      val actions = listOfNotNull(secondaryRightAction, rightAction)
-      for (action in actions) {
-        when (action.actionType) {
-          // Click an icon to open "app setting".
-          AppBarActionType.APP_SETTING -> {
-            IconButton(onClick = action.actionFn) {
-              Icon(
-                imageVector = Icons.Rounded.Settings,
-                contentDescription = stringResource(R.string.cd_app_settings_icon),
-                tint = MaterialTheme.colorScheme.onSurface,
-              )
-            }
+      when (rightAction?.actionType) {
+        // Click an icon to open "app setting".
+        AppBarActionType.APP_SETTING -> {
+          IconButton(onClick = rightAction.actionFn) {
+            Icon(
+              imageVector = Icons.Rounded.Settings,
+              contentDescription = stringResource(R.string.cd_app_settings_icon),
+              tint = MaterialTheme.colorScheme.onSurface,
+            )
           }
-
-          // Click a button to navigate up.
-          AppBarActionType.NAVIGATE_UP -> {
-            TextButton(onClick = action.actionFn) { Text("Done") }
-          }
-
-          else -> {}
         }
+
+        // Click a button to navigate up.
+        AppBarActionType.NAVIGATE_UP -> {
+          TextButton(onClick = rightAction.actionFn) { Text("Done") }
+        }
+
+        else -> {}
       }
     },
   )

@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.MapsUgc
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -52,6 +51,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
@@ -72,12 +73,15 @@ fun ModelPageAppBar(
   modifier: Modifier = Modifier,
   isResettingSession: Boolean = false,
   onResetSessionClicked: (Model) -> Unit = {},
-  onBenchmarkScreenClicked: (Model) -> Unit = {},
   canShowResetSessionButton: Boolean = false,
   hideModelSelector: Boolean = false,
+  useThemeColor: Boolean = false,
   onConfigChanged: (oldConfigValues: Map<String, Any>, newConfigValues: Map<String, Any>) -> Unit =
     { _, _ ->
     },
+  allowEditingSystemPrompt: Boolean = false,
+  curSystemPrompt: String = "",
+  onSystemPromptChanged: (String) -> Unit = {},
 ) {
   var showConfigDialog by remember { mutableStateOf(false) }
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
@@ -98,19 +102,18 @@ fun ModelPageAppBar(
         // Task type.
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+          val tintColor =
+            if (useThemeColor) MaterialTheme.colorScheme.onSurface
+            else getTaskIconColor(task = task)
           Icon(
             task.icon ?: ImageVector.vectorResource(task.iconVectorResourceId!!),
-            tint = getTaskIconColor(task = task),
-            modifier = Modifier.size(16.dp),
+            tint = tintColor,
+            modifier = Modifier.size(24.dp),
             contentDescription = null,
           )
-          Text(
-            task.label,
-            style = MaterialTheme.typography.titleMedium,
-            color = getTaskIconColor(task = task),
-          )
+          Text(task.label, style = MaterialTheme.typography.titleMedium, color = tintColor)
         }
 
         // Model chips pager.
@@ -140,38 +143,12 @@ fun ModelPageAppBar(
     // The config button for the model (if existed).
     actions = {
       val downloadSucceeded = curDownloadStatus?.status == ModelDownloadStatusType.SUCCEEDED
-      val showBenchmarkButton = model.showBenchmarkButton && downloadSucceeded
       val showConfigButton = model.configs.isNotEmpty() && downloadSucceeded
       val showResetSessionButton = canShowResetSessionButton && downloadSucceeded
-      Box(modifier = Modifier.size(126.dp), contentAlignment = Alignment.CenterEnd) {
-        var benchmarkButtonOffset = 0.dp
+      Box(modifier = Modifier.size(42.dp), contentAlignment = Alignment.Center) {
         var configButtonOffset = 0.dp
-        if (showResetSessionButton) {
-          if (showConfigButton) {
-            configButtonOffset = (-40).dp
-          }
-          if (showBenchmarkButton) {
-            benchmarkButtonOffset = if (showConfigButton) (-80).dp else (-40).dp
-          }
-        } else if (showConfigButton && showBenchmarkButton) {
-          benchmarkButtonOffset = (-40).dp
-        }
-        if (showBenchmarkButton) {
-          val enableBenchmarkButton = !isModelInitializing && !inProgress && isModelInitialized
-          IconButton(
-            onClick = { onBenchmarkScreenClicked(model) },
-            enabled = enableBenchmarkButton,
-            modifier =
-              Modifier.offset(x = benchmarkButtonOffset)
-                .alpha(if (!enableBenchmarkButton) 0.5f else 1f),
-          ) {
-            Icon(
-              imageVector = Icons.Rounded.BarChart,
-              contentDescription = stringResource(R.string.run_benchmark),
-              tint = MaterialTheme.colorScheme.onSurface,
-              modifier = Modifier.size(20.dp),
-            )
-          }
+        if (showConfigButton && canShowResetSessionButton) {
+          configButtonOffset = (-40).dp
         }
         if (showConfigButton) {
           val enableConfigButton = !isModelInitializing && !inProgress && isModelInitialized
@@ -227,12 +204,25 @@ fun ModelPageAppBar(
 
   // Config dialog.
   if (showConfigDialog) {
+    // Remove the reset conversation turn count config for non-tiny-garden tasks.
+    //
+    // This may happen when user imports a model with "enable tiny garden" turned on and use the
+    // model in another non-tiny-garden task.
+    val modelConfigs = model.configs.toMutableList()
+    if (task.id != BuiltInTaskId.LLM_TINY_GARDEN) {
+      modelConfigs.removeIf { it.key == ConfigKeys.RESET_CONVERSATION_TURN_COUNT }
+    }
+    if (
+        !task.allowThinking()
+    ) {
+      modelConfigs.removeIf { it.key == ConfigKeys.ENABLE_THINKING }
+    }
     ConfigDialog(
-      title = "Model configs",
-      configs = model.configs,
+      title = "Configurations",
+      configs = modelConfigs,
       initialValues = model.configValues,
       onDismissed = { showConfigDialog = false },
-      onOk = { curConfigValues ->
+      onOk = { curConfigValues, oldSystemPrompt, newSystemPrompt ->
         // Hide config dialog.
         showConfigDialog = false
 
@@ -240,7 +230,7 @@ fun ModelPageAppBar(
         // re-initialized.
         var same = true
         var needReinitialization = false
-        for (config in model.configs) {
+        for (config in modelConfigs) {
           val key = config.key.label
           val oldValue =
             convertValueToTargetType(
@@ -261,6 +251,9 @@ fun ModelPageAppBar(
           }
         }
         if (same) {
+          if (newSystemPrompt != oldSystemPrompt) {
+            onSystemPromptChanged(newSystemPrompt)
+          }
           return@ConfigDialog
         }
 
@@ -278,6 +271,11 @@ fun ModelPageAppBar(
               task = task,
               model = model,
               force = true,
+              onDone = {
+                if (oldSystemPrompt != newSystemPrompt) {
+                  onSystemPromptChanged(newSystemPrompt)
+                }
+              },
             )
           }
 
@@ -285,6 +283,9 @@ fun ModelPageAppBar(
           onConfigChanged(oldConfigValues, model.configValues)
         }
       },
+      showSystemPromptEditorTab = allowEditingSystemPrompt,
+      defaultSystemPrompt = task.defaultSystemPrompt,
+      curSystemPrompt = curSystemPrompt,
     )
   }
 }

@@ -480,7 +480,6 @@ fun MainUi(
   }
   // Main UI.
   else {
-    var hasHandledTinyGardenFirstRun by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxSize()) {
       Column(
         modifier =
@@ -534,15 +533,10 @@ fun MainUi(
                       Log.d(TAG, "webview finished loading")
 
                       // Show help on first launch.
-                      if (
-                        !hasHandledTinyGardenFirstRun &&
-                          !viewModel.dataStoreRepository.getHasRunTinyGarden()
-                      ) {
-                        hasHandledTinyGardenFirstRun = true
+                      if (!viewModel.dataStoreRepository.getHasRunTinyGarden()) {
                         Log.d(TAG, "First time running Tiny Garden. Showing help screen...")
+                        viewModel.dataStoreRepository.setHasRunTinyGarden(true)
                         scope.launch {
-                          runCatching { viewModel.dataStoreRepository.setHasRunTinyGarden(true) }
-                            .onFailure { e -> Log.e(TAG, "Failed to persist Tiny Garden first-run flag", e) }
                           delay(1000)
                           webViewRef
                             ?.runCatching { evaluateJavascript("tinyGarden.showHelp()", null) }
@@ -597,17 +591,13 @@ fun MainUi(
                 // Load page.
                 //
                 // http://appassets.androidplatform.net' is the recommended, reserved domain.
-                if (!hasHandledTinyGardenFirstRun && !viewModel.dataStoreRepository.getHasRunTinyGarden()) {
-                  hasHandledTinyGardenFirstRun = true
+                var url = "$ASSETS_BASE_URL/assets/tinygarden/index.html"
+                if (!viewModel.dataStoreRepository.getHasRunTinyGarden()) {
                   Log.d(TAG, "First time running Tiny Garden. Showing tutorial screen...")
-                  loadUrl("$ASSETS_BASE_URL/assets/tinygarden/index.html?tutorial=1")
-                  scope.launch {
-                    runCatching { viewModel.dataStoreRepository.setHasRunTinyGarden(true) }
-                      .onFailure { e -> Log.e(TAG, "Failed to persist Tiny Garden first-run flag", e) }
-                  }
-                } else {
-                  loadUrl("$ASSETS_BASE_URL/assets/tinygarden/index.html")
+                  viewModel.dataStoreRepository.setHasRunTinyGarden(true)
+                  url = "$url?tutorial=1"
                 }
+                loadUrl(url)
               }
             },
           )

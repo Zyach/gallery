@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Brush.Companion.linearGradient
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -61,7 +62,8 @@ import kotlinx.coroutines.delay
 
 private const val TAG = "AGUtils"
 
-val SMALL_BUTTON_CONTENT_PADDING = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+val SMALL_BUTTON_CONTENT_PADDING =
+  PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 8.dp)
 
 /** Format the bytes into a human-readable format. */
 fun Long.humanReadableSize(si: Boolean = true, extraDecimalForGbAndAbove: Boolean = false): String {
@@ -157,7 +159,7 @@ fun Context.createTempPictureUri(
 
   return FileProvider.getUriForFile(
     applicationContext,
-    "com.google.aiedge.gallery.provider" /* {applicationId}.provider */,
+    "com.google.ai.edge.gallery.provider" /* {applicationId}.provider */,
     tempFile,
   )
 }
@@ -166,7 +168,7 @@ fun checkNotificationPermissionAndStartDownload(
   context: Context,
   launcher: ManagedActivityResultLauncher<String, Boolean>,
   modelManagerViewModel: ModelManagerViewModel,
-  task: Task,
+  task: Task?,
   model: Model,
 ) {
   // Check permission
@@ -249,6 +251,7 @@ fun RevealingText(
   text: String,
   style: TextStyle,
   modifier: Modifier = Modifier,
+  annotatedText: AnnotatedString? = null,
   animationDelay: Long = 0,
   animationDurationMs: Int = 300,
   edgeGradientRelativeSize: Float = 0.5f,
@@ -279,7 +282,11 @@ fun RevealingText(
         },
     contentAlignment = Alignment.Center,
   ) {
-    Text(text, style = style, modifier = Modifier.padding(horizontal = extraTextPadding))
+    if (annotatedText != null) {
+      Text(annotatedText, style = style, modifier = Modifier.padding(horizontal = extraTextPadding))
+    } else {
+      Text(text, style = style, modifier = Modifier.padding(horizontal = extraTextPadding))
+    }
   }
 }
 

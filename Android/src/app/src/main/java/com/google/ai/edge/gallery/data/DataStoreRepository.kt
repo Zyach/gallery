@@ -16,7 +16,6 @@
 
 package com.google.ai.edge.gallery.data
 
-import android.util.Log
 import androidx.datastore.core.DataStore
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.BenchmarkResult
@@ -27,74 +26,72 @@ import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Settings
 import com.google.ai.edge.gallery.proto.Theme
 import com.google.ai.edge.gallery.proto.UserData
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.atomic.AtomicReference
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
+// TODO(b/423700720): Change to async (suspend) functions
 interface DataStoreRepository {
-  suspend fun saveTextInputHistory(history: List<String>)
+  fun saveTextInputHistory(history: List<String>)
 
   fun readTextInputHistory(): List<String>
 
-  suspend fun saveTheme(theme: Theme)
+  fun saveTheme(theme: Theme)
 
   fun readTheme(): Theme
 
-  suspend fun saveAccessTokenData(accessToken: String, refreshToken: String, expiresAt: Long)
+  fun saveSecret(key: String, value: String)
 
-  suspend fun clearAccessTokenData()
+  fun readSecret(key: String): String?
+
+  fun deleteSecret(key: String)
+
+  fun saveAccessTokenData(accessToken: String, refreshToken: String, expiresAt: Long)
+
+  fun clearAccessTokenData()
 
   fun readAccessTokenData(): AccessTokenData?
 
-  suspend fun saveImportedModels(importedModels: List<ImportedModel>)
-
-  suspend fun upsertImportedModel(importedModel: ImportedModel)
-
-  suspend fun removeImportedModel(fileName: String)
+  fun saveImportedModels(importedModels: List<ImportedModel>)
 
   fun readImportedModels(): List<ImportedModel>
 
   fun isTosAccepted(): Boolean
 
-  suspend fun acceptTos()
+  fun acceptTos()
 
   fun isGemmaTermsOfUseAccepted(): Boolean
 
-  suspend fun acceptGemmaTermsOfUse()
+  fun acceptGemmaTermsOfUse()
 
   fun getHasRunTinyGarden(): Boolean
 
-  suspend fun setHasRunTinyGarden(value: Boolean)
+  fun setHasRunTinyGarden(hasRun: Boolean)
 
-  suspend fun addCutout(cutout: Cutout)
+  fun addCutout(cutout: Cutout)
 
   fun getAllCutouts(): List<Cutout>
 
-  suspend fun setCutout(newCutout: Cutout)
+  fun setCutout(newCutout: Cutout)
 
-  suspend fun setCutouts(cutouts: List<Cutout>)
+  fun setCutouts(cutouts: List<Cutout>)
 
-  suspend fun setHasSeenBenchmarkComparisonHelp(seen: Boolean)
+  fun setHasSeenBenchmarkComparisonHelp(seen: Boolean)
 
   fun getHasSeenBenchmarkComparisonHelp(): Boolean
 
-  suspend fun addBenchmarkResult(result: BenchmarkResult)
-
-  suspend fun setBenchmarkResults(results: List<BenchmarkResult>)
+  fun addBenchmarkResult(result: BenchmarkResult)
 
   fun getAllBenchmarkResults(): List<BenchmarkResult>
 
-  suspend fun deleteBenchmarkResult(index: Int)
+  fun deleteBenchmarkResult(index: Int)
 
-  suspend fun addViewedPromoId(promoId: String)
+  /** Records that a promo with the specified ID has been viewed. */
+  fun addViewedPromoId(promoId: String)
 
-  suspend fun removeViewedPromoId(promoId: String)
+  /** Removes a viewed promo record. */
+  fun removeViewedPromoId(promoId: String)
 
+  /** Returns whether a promo with the specified ID has been viewed. */
   fun hasViewedPromo(promoId: String): Boolean
 }
 
@@ -105,325 +102,245 @@ class DefaultDataStoreRepository(
   private val cutoutDataStore: DataStore<CutoutCollection>,
   private val benchmarkResultsDataStore: DataStore<BenchmarkResults>,
 ) : DataStoreRepository {
-  companion object {
-    private const val TAG = "AGDataStoreRepository"
-  }
-
-  private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-  private val settingsState = MutableStateFlow(Settings.getDefaultInstance())
-  private val userDataState = MutableStateFlow(UserData.getDefaultInstance())
-  private val cutoutsState = MutableStateFlow(CutoutCollection.getDefaultInstance())
-  private val benchmarkResultsState = MutableStateFlow(BenchmarkResults.getDefaultInstance())
-  private val settingsReady = CountDownLatch(1)
-  private val userDataReady = CountDownLatch(1)
-  private val cutoutsReady = CountDownLatch(1)
-  private val benchmarkResultsReady = CountDownLatch(1)
-  private val settingsFailure = AtomicReference<Throwable?>(null)
-  private val userDataFailure = AtomicReference<Throwable?>(null)
-  private val cutoutsFailure = AtomicReference<Throwable?>(null)
-  private val benchmarkResultsFailure = AtomicReference<Throwable?>(null)
-
-  init {
-    launchStateCollector(dataStore, settingsState, settingsReady, settingsFailure)
-    launchStateCollector(userDataDataStore, userDataState, userDataReady, userDataFailure)
-    launchStateCollector(cutoutDataStore, cutoutsState, cutoutsReady, cutoutsFailure)
-    launchStateCollector(
-      benchmarkResultsDataStore,
-      benchmarkResultsState,
-      benchmarkResultsReady,
-      benchmarkResultsFailure,
-    )
-  }
-
-  private fun <T> launchStateCollector(
-    store: DataStore<T>,
-    state: MutableStateFlow<T>,
-    ready: CountDownLatch,
-    failure: AtomicReference<Throwable?>,
-  ) {
-    repositoryScope.launch {
-      try {
-        store.data.collect {
-          state.value = it
-          ready.countDown()
-        }
-      } catch (t: Throwable) {
-        if (ready.count > 0) {
-          failure.compareAndSet(null, t)
-          ready.countDown()
-        } else {
-          Log.e(TAG, "DataStore collector failed after initialization; keeping last snapshot", t)
-        }
+  override fun saveTextInputHistory(history: List<String>) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().clearTextInputHistory().addAllTextInputHistory(history).build()
       }
     }
   }
 
-  private fun <T> awaitState(
-    ready: CountDownLatch,
-    failure: AtomicReference<Throwable?>,
-    state: MutableStateFlow<T>,
-    label: String,
-  ): T {
-    ready.await()
-    failure.get()?.let { throw IllegalStateException("Failed to initialize $label datastore", it) }
-    return state.value
-  }
-
-  private fun awaitSettings(): Settings {
-    return awaitState(settingsReady, settingsFailure, settingsState, "settings")
-  }
-
-  private fun awaitUserData(): UserData {
-    return awaitState(userDataReady, userDataFailure, userDataState, "userData")
-  }
-
-  private fun awaitCutouts(): CutoutCollection {
-    return awaitState(cutoutsReady, cutoutsFailure, cutoutsState, "cutouts")
-  }
-
-  private fun awaitBenchmarkResults(): BenchmarkResults {
-    return awaitState(
-      benchmarkResultsReady,
-      benchmarkResultsFailure,
-      benchmarkResultsState,
-      "benchmarkResults",
-    )
-  }
-
-  override suspend fun saveTextInputHistory(history: List<String>) {
-    val updatedSettings =
-      dataStore.updateData { settings ->
-        settings.toBuilder().clearTextInputHistory().addAllTextInputHistory(history).build()
-      }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
-  }
-
   override fun readTextInputHistory(): List<String> {
-    return awaitSettings().textInputHistoryList
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.textInputHistoryList
+    }
   }
 
-  override suspend fun saveTheme(theme: Theme) {
-    val updatedSettings = dataStore.updateData { settings -> settings.toBuilder().setTheme(theme).build() }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+  override fun saveTheme(theme: Theme) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setTheme(theme).build() }
+    }
   }
 
   override fun readTheme(): Theme {
-    val curTheme = awaitSettings().theme
-    return if (curTheme == Theme.THEME_UNSPECIFIED) Theme.THEME_AUTO else curTheme
+    return runBlocking {
+      val settings = dataStore.data.first()
+      val curTheme = settings.theme
+      // Use "auto" as the default theme.
+      if (curTheme == Theme.THEME_UNSPECIFIED) Theme.THEME_AUTO else curTheme
+    }
   }
 
-  override suspend fun saveAccessTokenData(
-    accessToken: String,
-    refreshToken: String,
-    expiresAt: Long,
-  ) {
-    val accessTokenData =
-      AccessTokenData.newBuilder()
-        .setAccessToken(accessToken)
-        .setRefreshToken(refreshToken)
-        .setExpiresAtMs(expiresAt)
-        .build()
+  override fun saveSecret(key: String, value: String) {
+    runBlocking {
+      userDataDataStore.updateData { userData ->
+        userData.toBuilder().putSecrets(key, value).build()
+      }
+    }
+  }
 
-    // Clear the entry in old data store.
-    val updatedSettings =
+  override fun readSecret(key: String): String? {
+    return runBlocking { userDataDataStore.data.first().secretsMap[key] }
+  }
+
+  override fun deleteSecret(key: String) {
+    runBlocking {
+      userDataDataStore.updateData { userData -> userData.toBuilder().removeSecrets(key).build() }
+    }
+  }
+
+  override fun saveAccessTokenData(accessToken: String, refreshToken: String, expiresAt: Long) {
+    runBlocking {
+      // Clear the entry in old data store.
       dataStore.updateData { settings ->
         settings.toBuilder().setAccessTokenData(AccessTokenData.getDefaultInstance()).build()
       }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
 
-    val updatedUserData =
       userDataDataStore.updateData { userData ->
-        userData.toBuilder().setAccessTokenData(accessTokenData).build()
+        userData
+          .toBuilder()
+          .setAccessTokenData(
+            AccessTokenData.newBuilder()
+              .setAccessToken(accessToken)
+              .setRefreshToken(refreshToken)
+              .setExpiresAtMs(expiresAt)
+              .build()
+          )
+          .build()
       }
-    userDataState.value = updatedUserData
-    userDataReady.countDown()
+    }
   }
 
-  override suspend fun clearAccessTokenData() {
-    val updatedSettings = dataStore.updateData { settings -> settings.toBuilder().clearAccessTokenData().build() }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
-    val updatedUserData =
-      userDataDataStore.updateData { userData -> userData.toBuilder().clearAccessTokenData().build() }
-    userDataState.value = updatedUserData
-    userDataReady.countDown()
+  override fun clearAccessTokenData() {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().clearAccessTokenData().build() }
+      userDataDataStore.updateData { userData ->
+        userData.toBuilder().clearAccessTokenData().build()
+      }
+    }
   }
 
   override fun readAccessTokenData(): AccessTokenData? {
-    return awaitUserData().accessTokenData
+    return runBlocking {
+      val userData = userDataDataStore.data.first()
+      userData.accessTokenData
+    }
   }
 
-  override suspend fun saveImportedModels(importedModels: List<ImportedModel>) {
-    val updatedSettings =
+  override fun saveImportedModels(importedModels: List<ImportedModel>) {
+    runBlocking {
       dataStore.updateData { settings ->
         settings.toBuilder().clearImportedModel().addAllImportedModel(importedModels).build()
       }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
-  }
-
-  override suspend fun upsertImportedModel(importedModel: ImportedModel) {
-    val updatedSettings =
-      dataStore.updateData { settings ->
-        val builder = settings.toBuilder().clearImportedModel()
-        builder.addAllImportedModel(settings.importedModelList.filter { it.fileName != importedModel.fileName })
-        builder.addImportedModel(importedModel)
-        builder.build()
-      }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
-  }
-
-  override suspend fun removeImportedModel(fileName: String) {
-    val updatedSettings =
-      dataStore.updateData { settings ->
-        settings
-          .toBuilder()
-          .clearImportedModel()
-          .addAllImportedModel(settings.importedModelList.filter { it.fileName != fileName })
-          .build()
-      }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+    }
   }
 
   override fun readImportedModels(): List<ImportedModel> {
-    return awaitSettings().importedModelList
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.importedModelList
+    }
   }
 
   override fun isTosAccepted(): Boolean {
-    return awaitSettings().isTosAccepted
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.isTosAccepted
+    }
   }
 
-  override suspend fun acceptTos() {
-    val updatedSettings =
+  override fun acceptTos() {
+    runBlocking {
       dataStore.updateData { settings -> settings.toBuilder().setIsTosAccepted(true).build() }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+    }
   }
 
   override fun isGemmaTermsOfUseAccepted(): Boolean {
-    return awaitSettings().isGemmaTermsAccepted
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.isGemmaTermsAccepted
+    }
   }
 
-  override suspend fun acceptGemmaTermsOfUse() {
-    val updatedSettings =
-      dataStore.updateData { settings -> settings.toBuilder().setIsGemmaTermsAccepted(true).build() }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+  override fun acceptGemmaTermsOfUse() {
+    runBlocking {
+      dataStore.updateData { settings ->
+        settings.toBuilder().setIsGemmaTermsAccepted(true).build()
+      }
+    }
   }
 
   override fun getHasRunTinyGarden(): Boolean {
-    return awaitSettings().hasRunTinyGarden
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.hasRunTinyGarden
+    }
   }
 
-  override suspend fun setHasRunTinyGarden(value: Boolean) {
-    val updatedSettings =
-      dataStore.updateData { settings -> settings.toBuilder().setHasRunTinyGarden(value).build() }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+  override fun setHasRunTinyGarden(hasRun: Boolean) {
+    runBlocking {
+      dataStore.updateData { settings -> settings.toBuilder().setHasRunTinyGarden(hasRun).build() }
+    }
   }
 
-  override suspend fun addCutout(cutout: Cutout) {
-    val updatedCutouts =
+  override fun addCutout(cutout: Cutout) {
+    runBlocking {
       cutoutDataStore.updateData { cutouts -> cutouts.toBuilder().addCutout(cutout).build() }
-    cutoutsState.value = updatedCutouts
-    cutoutsReady.countDown()
+    }
   }
 
   override fun getAllCutouts(): List<Cutout> {
-    return awaitCutouts().cutoutList
+    return runBlocking { cutoutDataStore.data.first().cutoutList }
   }
 
-  override suspend fun setCutout(newCutout: Cutout) {
-    val updatedCutouts =
+  override fun setCutout(newCutout: Cutout) {
+    runBlocking {
       cutoutDataStore.updateData { cutouts ->
         var index = -1
-        for (i in 0 until cutouts.cutoutCount) {
-          val cutout = cutouts.cutoutList[i]
+        for (i in 0..<cutouts.cutoutCount) {
+          val cutout = cutouts.cutoutList.get(i)
           if (cutout.id == newCutout.id) {
             index = i
             break
           }
         }
-        if (index >= 0) cutouts.toBuilder().setCutout(index, newCutout).build() else cutouts
+        if (index >= 0) {
+          cutouts.toBuilder().setCutout(index, newCutout).build()
+        } else {
+          cutouts
+        }
       }
-    cutoutsState.value = updatedCutouts
-    cutoutsReady.countDown()
+    }
   }
 
-  override suspend fun setCutouts(cutouts: List<Cutout>) {
-    val updatedCutouts =
+  override fun setCutouts(cutouts: List<Cutout>) {
+    runBlocking {
       cutoutDataStore.updateData { CutoutCollection.newBuilder().addAllCutout(cutouts).build() }
-    cutoutsState.value = updatedCutouts
-    cutoutsReady.countDown()
+    }
   }
 
-  override suspend fun setHasSeenBenchmarkComparisonHelp(seen: Boolean) {
-    val updatedSettings =
+  override fun setHasSeenBenchmarkComparisonHelp(seen: Boolean) {
+    runBlocking {
       dataStore.updateData { settings ->
         settings.toBuilder().setHasSeenBenchmarkComparisonHelp(seen).build()
       }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+    }
   }
 
   override fun getHasSeenBenchmarkComparisonHelp(): Boolean {
-    return awaitSettings().hasSeenBenchmarkComparisonHelp
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.hasSeenBenchmarkComparisonHelp
+    }
   }
 
-  override suspend fun addBenchmarkResult(result: BenchmarkResult) {
-    val updatedResults =
-      benchmarkResultsDataStore.updateData { results -> results.toBuilder().addResult(0, result).build() }
-    benchmarkResultsState.value = updatedResults
-    benchmarkResultsReady.countDown()
-  }
-
-  override suspend fun setBenchmarkResults(results: List<BenchmarkResult>) {
-    val updatedResults =
-      benchmarkResultsDataStore.updateData { currentResults ->
-        currentResults.toBuilder().clearResult().addAllResult(results).build()
+  override fun addBenchmarkResult(result: BenchmarkResult) {
+    runBlocking {
+      benchmarkResultsDataStore.updateData { results ->
+        results.toBuilder().addResult(0, result).build()
       }
-    benchmarkResultsState.value = updatedResults
-    benchmarkResultsReady.countDown()
+    }
   }
 
   override fun getAllBenchmarkResults(): List<BenchmarkResult> {
-    return awaitBenchmarkResults().resultList
+    return runBlocking { benchmarkResultsDataStore.data.first().resultList }
   }
 
-  override suspend fun deleteBenchmarkResult(index: Int) {
-    val updatedResults =
-      benchmarkResultsDataStore.updateData { results -> results.toBuilder().removeResult(index).build() }
-    benchmarkResultsState.value = updatedResults
-    benchmarkResultsReady.countDown()
-  }
-
-  override suspend fun addViewedPromoId(promoId: String) {
-    val updatedSettings =
-      dataStore.updateData { settings ->
-        if (settings.viewedPromoIdList.contains(promoId)) settings
-        else settings.toBuilder().addViewedPromoId(promoId).build()
+  override fun deleteBenchmarkResult(index: Int) {
+    runBlocking {
+      benchmarkResultsDataStore.updateData { results ->
+        val newResults = results.toBuilder().removeResult(index).build()
+        newResults
       }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+    }
   }
 
-  override suspend fun removeViewedPromoId(promoId: String) {
-    val updatedSettings =
+  override fun addViewedPromoId(promoId: String) {
+    runBlocking {
+      dataStore.updateData { settings ->
+        if (settings.viewedPromoIdList.contains(promoId)) {
+          settings
+        } else {
+          settings.toBuilder().addViewedPromoId(promoId).build()
+        }
+      }
+    }
+  }
+
+  override fun removeViewedPromoId(promoId: String) {
+    runBlocking {
       dataStore.updateData { settings ->
         val newList = settings.viewedPromoIdList.filter { it != promoId }
         settings.toBuilder().clearViewedPromoId().addAllViewedPromoId(newList).build()
       }
-    settingsState.value = updatedSettings
-    settingsReady.countDown()
+    }
   }
 
   override fun hasViewedPromo(promoId: String): Boolean {
-    return awaitSettings().viewedPromoIdList.contains(promoId)
+    return runBlocking {
+      val settings = dataStore.data.first()
+      settings.viewedPromoIdList.contains(promoId)
+    }
   }
-
 }

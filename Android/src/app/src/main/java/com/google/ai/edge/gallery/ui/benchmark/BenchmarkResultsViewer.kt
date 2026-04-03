@@ -160,7 +160,7 @@ fun BenchmarkResultsViewer(
     ) {
       delay(500)
       showBenchmarkComparisonHelpBottomSheet = true
-      scope.launch { viewModel.dataStoreRepository.setHasSeenBenchmarkComparisonHelp(true) }
+      viewModel.dataStoreRepository.setHasSeenBenchmarkComparisonHelp(true)
     }
   }
 
@@ -562,7 +562,6 @@ fun BenchmarkResultsViewer(
                                     llmResult.stats.firstInitTimeMs,
                                   ),
                                 unit = "ms",
-                                numericValue = llmResult.stats.firstInitTimeMs,
                                 baselineValue =
                                   if (result.id != uiState.baselineResult?.id) {
                                     baselineStats?.firstInitTimeMs
@@ -770,7 +769,6 @@ private fun StatRow(
   value: String,
   modifier: Modifier = Modifier,
   unit: String = "",
-  numericValue: Double? = null,
   baselineValue: Double? = null,
   lessIsBetter: Boolean = false,
 ) {
@@ -807,8 +805,8 @@ private fun StatRow(
           contentAlignment = Alignment.CenterStart,
           transitionSpec = { fadeIn() togetherWith fadeOut() },
         ) { curBaselineValue ->
-          if (curBaselineValue != null && numericValue != null && abs(curBaselineValue) > 1e-6) {
-            val doubleValue = numericValue
+          if (curBaselineValue != null) {
+            val doubleValue = value.toDouble()
             val pct = (doubleValue - curBaselineValue) / curBaselineValue * 100
             val strPct = String.format(Locale.getDefault(), "%.1f", abs(pct))
             val sign = if (pct >= 0.0) "+" else "-"

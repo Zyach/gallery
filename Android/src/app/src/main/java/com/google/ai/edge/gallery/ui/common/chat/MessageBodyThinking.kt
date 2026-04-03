@@ -32,7 +32,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,14 +48,11 @@ import com.google.ai.edge.gallery.ui.common.MarkdownText
 
 @Composable
 fun MessageBodyThinking(thinkingText: String, inProgress: Boolean) {
-  var isExpanded by remember { mutableStateOf(inProgress) }
-  var wasInProgress by remember { mutableStateOf(inProgress) }
+  var isExpanded by remember { mutableStateOf(false) }
 
-  LaunchedEffect(inProgress) {
-    if (inProgress && !wasInProgress) {
-      isExpanded = true
-    }
-    wasInProgress = inProgress
+  // Auto-expand while thinking is in progress
+  if (inProgress) {
+    isExpanded = true
   }
 
   Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -72,7 +68,7 @@ fun MessageBodyThinking(thinkingText: String, inProgress: Boolean) {
       )
       Icon(
         imageVector = if (isExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-        contentDescription = null,
+        contentDescription = if (isExpanded) "Hide thinking" else "Show thinking",
       )
     }
 

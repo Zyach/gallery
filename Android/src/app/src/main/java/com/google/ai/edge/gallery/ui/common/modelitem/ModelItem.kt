@@ -16,16 +16,6 @@
 
 package com.google.ai.edge.gallery.ui.common.modelitem
 
-// import androidx.compose.ui.tooling.preview.Preview
-// import com.google.ai.edge.gallery.ui.preview.MODEL_TEST1
-// import com.google.ai.edge.gallery.ui.preview.MODEL_TEST2
-// import com.google.ai.edge.gallery.ui.preview.MODEL_TEST3
-// import com.google.ai.edge.gallery.ui.preview.MODEL_TEST4
-// import com.google.ai.edge.gallery.ui.preview.PreviewModelManagerViewModel
-// import com.google.ai.edge.gallery.ui.preview.TASK_TEST1
-// import com.google.ai.edge.gallery.ui.preview.TASK_TEST2
-// import com.google.ai.edge.gallery.ui.theme.GalleryTheme
-
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -63,6 +53,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.ModelDownloadStatusType
+import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
@@ -79,20 +71,24 @@ import com.google.ai.edge.gallery.ui.theme.customColors
 @Composable
 fun ModelItem(
   model: Model,
-  task: Task,
+  task: Task?,
   modelManagerViewModel: ModelManagerViewModel,
   onModelClicked: (Model) -> Unit,
+  onBenchmarkClicked: (Model) -> Unit,
   modifier: Modifier = Modifier,
+  expanded: Boolean? = null,
   showDeleteButton: Boolean = true,
   canExpand: Boolean = true,
+  showBenchmarkButton: Boolean = false,
+  onExpanded: (Boolean) -> Unit = {},
 ) {
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val downloadStatus by remember {
     derivedStateOf { modelManagerUiState.modelDownloadStatus[model.name] }
   }
 
-  val isBestOverall = model.bestForTaskIds.contains(task.id)
-  var isExpanded by remember { mutableStateOf(isBestOverall) }
+  val isBestOverall = model.bestForTaskIds.contains(task?.id ?: "")
+  var isExpanded by remember { mutableStateOf(expanded ?: isBestOverall) }
 
   var boxModifier =
     modifier
@@ -105,7 +101,8 @@ fun ModelItem(
         onClick = {
           if (!model.imported) {
             isExpanded = !isExpanded
-          } else {
+            onExpanded(isExpanded)
+          } else if (!showBenchmarkButton) {
             onModelClicked(model)
           }
         },
@@ -117,27 +114,30 @@ fun ModelItem(
     }
 
   Box(modifier = boxModifier) {
-    SharedTransitionLayout {
-      AnimatedContent(isExpanded, label = "item_layout_transition") { targetState ->
-        val deleteModelButton =
-          @Composable {
+    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Box(
+        modifier = Modifier.semantics { isTraversalGroup = true },
+        contentAlignment = Alignment.CenterStart,
+      ) {
+        ModelNameAndStatus(
+          model = model,
+          task = task,
+          downloadStatus = downloadStatus,
+          isExpanded = isExpanded,
+          modifier = Modifier.fillMaxWidth(),
+        )
+        // Button to delete model and expand/collapse button at the right.
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.align(Alignment.TopEnd)) {
+          if (model.localFileRelativeDirPathOverride.isEmpty()) {
             DeleteModelButton(
               model = model,
-              task = task,
               modelManagerViewModel = modelManagerViewModel,
               downloadStatus = downloadStatus,
-              showDeleteButton = showDeleteButton,
-              modifier =
-                Modifier.offset(y = (-12).dp, x = if (model.imported) 12.dp else 0.dp)
-                  .sharedElement(
-                    sharedContentState = rememberSharedContentState(key = "action_button"),
-                    animatedVisibilityScope = this@AnimatedContent,
-                  ),
+              modifier = Modifier.offset(y = (-12).dp, x = if (model.imported) 12.dp else 0.dp),
+              showDeleteButton = showDeleteButton
             )
           }
-
-        val expandButton =
-          @Composable {
+          if (!model.imported) {
             Icon(
               if (isExpanded) Icons.Rounded.UnfoldLess else Icons.Rounded.UnfoldMore,
               contentDescription =
@@ -145,123 +145,48 @@ fun ModelItem(
                   if (isExpanded) R.string.cd_collapse_icon else R.string.cd_expand_icon
                 ),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier =
-                Modifier.alpha(0.6f)
-                  .sharedElement(
-                    sharedContentState = rememberSharedContentState(key = "expand_button"),
-                    animatedVisibilityScope = this@AnimatedContent,
-                  ),
+              modifier = Modifier.alpha(0.6f),
             )
           }
-
-        val description =
-          @Composable {
+        }
+      }
+      AnimatedContent(isExpanded, label = "item_layout_transition") { targetState ->
+        // Show description when expanded.
+        if (targetState) {
+          Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (model.info.isNotEmpty()) {
               MarkdownText(
                 model.info,
                 smallFontSize = true,
                 textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier =
-                  Modifier.padding(top = 12.dp)
-                    .sharedElement(
-                      sharedContentState = rememberSharedContentState(key = "description"),
-                      animatedVisibilityScope = this@AnimatedContent,
-                    )
-                    .skipToLookaheadSize(),
+                modifier = Modifier.padding(top = 12.dp),
               )
             }
           }
-
-        val downloadModelPanel =
-          @Composable {
-            DownloadModelPanel(
-              task = task,
-              model = model,
-              downloadStatus = downloadStatus,
-              animatedVisibilityScope = this@AnimatedContent,
-              sharedTransitionScope = this@SharedTransitionLayout,
-              modifier =
-                Modifier.sharedElement(
-                    sharedContentState = rememberSharedContentState(key = "download_panel"),
-                    animatedVisibilityScope = this@AnimatedContent,
-                  )
-                  .padding(top = if (isExpanded) 12.dp else 0.dp),
-              modelManagerViewModel = modelManagerViewModel,
-              isExpanded = isExpanded,
-              onTryItClicked = { onModelClicked(model) },
-            )
-          }
-
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.semantics { isTraversalGroup = true },
-          ) {
-            ModelNameAndStatus(
-              model = model,
-              task = task,
-              downloadStatus = downloadStatus,
-              isExpanded = isExpanded,
-              modifier = Modifier.weight(1f),
-              animatedVisibilityScope = this@AnimatedContent,
-              sharedTransitionScope = this@SharedTransitionLayout,
-            )
-            // Button to delete model and expand/collapse button at the right.
-            Row(verticalAlignment = Alignment.Top) {
-              if (model.localFileRelativeDirPathOverride.isEmpty()) {
-                deleteModelButton()
-              }
-              if (!model.imported) {
-                expandButton()
-              }
-            }
-          }
-          // Show description when expanded.
-          if (targetState) {
-            description()
-          }
-          // Model download panel.
-          downloadModelPanel()
+        }
+      }
+      SharedTransitionLayout {
+        AnimatedContent(isExpanded, label = "item_layout_transition") { targetState ->
+          DownloadModelPanel(
+            task = task,
+            model = model,
+            downloadStatus = downloadStatus,
+            animatedVisibilityScope = this@AnimatedContent,
+            sharedTransitionScope = this@SharedTransitionLayout,
+            modifier =
+              Modifier.sharedElement(
+                  sharedContentState = rememberSharedContentState(key = "download_panel"),
+                  animatedVisibilityScope = this@AnimatedContent,
+                )
+                .padding(top = if (targetState) 12.dp else 0.dp),
+            modelManagerViewModel = modelManagerViewModel,
+            isExpanded = targetState,
+            onTryItClicked = { onModelClicked(model) },
+            onBenchmarkClicked = { onBenchmarkClicked(model) },
+            showBenchmarkButton = showBenchmarkButton,
+          )
         }
       }
     }
   }
 }
-
-// @Preview(showBackground = true)
-// @Composable
-// fun PreviewModelItem() {
-//   GalleryTheme {
-//     Column(
-//       verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(16.dp)
-//     ) {
-//       ModelItem(
-//         model = MODEL_TEST1,
-//         task = TASK_TEST1,
-//         onModelClicked = { },
-//         modelManagerViewModel = PreviewModelManagerViewModel(context = LocalContext.current),
-//       )
-//       ModelItem(
-//         model = MODEL_TEST2,
-//         task = TASK_TEST1,
-//         onModelClicked = { },
-//         modelManagerViewModel = PreviewModelManagerViewModel(context = LocalContext.current),
-//       )
-//       ModelItem(
-//         model = MODEL_TEST3,
-//         task = TASK_TEST2,
-//         onModelClicked = { },
-//         modelManagerViewModel = PreviewModelManagerViewModel(context = LocalContext.current),
-//       )
-//       ModelItem(
-//         model = MODEL_TEST4,
-//         task = TASK_TEST2,
-//         onModelClicked = { },
-//         modelManagerViewModel = PreviewModelManagerViewModel(context = LocalContext.current),
-//       )
-//     }
-//   }
-// }

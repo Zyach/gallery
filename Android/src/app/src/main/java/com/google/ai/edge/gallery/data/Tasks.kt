@@ -127,7 +127,13 @@ data class Task(
 
   var index: Int = -1,
   val updateTrigger: MutableState<Long> = mutableLongStateOf(0),
-)
+) {
+  fun allowThinking(): Boolean {
+    return id == BuiltInTaskId.LLM_CHAT ||
+      id == BuiltInTaskId.LLM_ASK_IMAGE ||
+      id == BuiltInTaskId.LLM_ASK_AUDIO
+  }
+}
 
 object BuiltInTaskId {
   const val LLM_CHAT = "llm_chat"
@@ -136,6 +142,7 @@ object BuiltInTaskId {
   const val LLM_ASK_AUDIO = "llm_ask_audio"
   const val LLM_MOBILE_ACTIONS = "llm_mobile_actions"
   const val LLM_TINY_GARDEN = "llm_tiny_garden"
+  const val MP_SCRAPBOOK = "mp_scrapbook"
 }
 
 private val allLegacyTaskIds: MutableSet<String> =
@@ -148,10 +155,4 @@ private val allLegacyTaskIds: MutableSet<String> =
 
 fun isLegacyTasks(id: String): Boolean {
   return allLegacyTaskIds.contains(id)
-}
-
-fun Task.allowThinking(): Boolean {
-  return id == BuiltInTaskId.LLM_CHAT ||
-    id == BuiltInTaskId.LLM_ASK_IMAGE ||
-    id == BuiltInTaskId.LLM_ASK_AUDIO
 }

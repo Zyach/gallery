@@ -141,7 +141,7 @@ class BooleanSwitchConfig(
     valueType = ValueType.BOOLEAN,
   )
 
-/** Configuration setting for a dropdown. */
+/** Configuration setting for a segmented button. */
 class SegmentedButtonConfig(
   override val key: ConfigKey,
   override val defaultValue: String,
@@ -270,6 +270,7 @@ fun createLlmChatConfigs(
         ),
       )
       .toMutableList()
+
   if (supportThinking) {
     configs.add(BooleanSwitchConfig(key = ConfigKeys.ENABLE_THINKING, defaultValue = false))
   }
@@ -278,6 +279,8 @@ fun createLlmChatConfigs(
 
 /**
  * Creates the configuration settings for an LLM model that only supports NPU.
+ *
+ * For now NPU models don't support setting topK, topP, and temperature.
  */
 fun createLlmChatConfigsForNpuModel(
   defaultMaxToken: Int = DEFAULT_MAX_TOKEN,

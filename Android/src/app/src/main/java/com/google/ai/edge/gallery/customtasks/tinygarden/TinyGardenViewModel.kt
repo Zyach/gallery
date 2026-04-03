@@ -23,7 +23,6 @@ import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
@@ -163,10 +162,10 @@ constructor(
 
     viewModelScope.launch(Dispatchers.Default) {
       setResettingEngine(resetting = true)
-      model.runtimeHelper.cleanUp(
+      LlmChatModelHelper.cleanUp(
         model = model,
         onDone = {
-          model.runtimeHelper.initialize(
+          LlmChatModelHelper.initialize(
             context = context,
             model = model,
             supportImage = false,
@@ -208,7 +207,7 @@ constructor(
           prevAction = prevAction,
         )
       Log.d(TAG, "Current system prompt:\n$curSystemPrompt")
-      model.runtimeHelper.resetConversation(
+      LlmChatModelHelper.resetConversation(
         model = model,
         supportImage = false,
         supportAudio = false,

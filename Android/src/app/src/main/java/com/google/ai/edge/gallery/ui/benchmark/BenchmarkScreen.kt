@@ -71,7 +71,6 @@ import com.google.ai.edge.gallery.data.Config
 import com.google.ai.edge.gallery.data.ConfigKey
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.NumberSliderConfig
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.gallery.data.ValueType
@@ -92,18 +91,11 @@ fun BenchmarkScreen(
   onBackClicked: () -> Unit,
 ) {
   val uiState by viewModel.uiState.collectAsState()
-  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   var enableBackButton by remember { mutableStateOf(true) }
   var showRunBenchmarkConfirmationDialog by remember { mutableStateOf(false) }
-  val downloadedLlmModelNames =
-    modelManagerUiState.tasks
-      .flatMap { task -> task.models }
-      .distinctBy { model -> model.name }
-      .filter { model ->
-        model.isLlm &&
-          modelManagerUiState.modelDownloadStatus[model.name]?.status == ModelDownloadStatusType.SUCCEEDED
-      }
-      .map { model -> model.name }
+  val downloadedLlmModelNames = remember {
+    modelManagerViewModel.getAllDownloadedModels().filter { it.isLlm }.map { it.name }
+  }
   var selectedModelName by remember { mutableStateOf(initialModel.name) }
   var selectedModel by
     remember(selectedModelName) {
@@ -274,7 +266,7 @@ fun BenchmarkScreen(
             ) {
               Icon(Icons.Rounded.BarChart, contentDescription = null)
               Spacer(modifier = Modifier.width(4.dp))
-              Text(stringResource(R.string.run_benchmark))
+              Text(stringResource(R.string.benchmark))
             }
           }
         }

@@ -87,6 +87,7 @@ fun ModelManager(
       contentPadding = innerPadding,
       enableAnimation = enableAnimation,
       onModelClicked = onModelClicked,
+      onBenchmarkClicked = {},
       modifier = Modifier.fillMaxSize(),
     )
   }

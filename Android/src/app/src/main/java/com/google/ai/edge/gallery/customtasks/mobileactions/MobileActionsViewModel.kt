@@ -28,14 +28,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmModelInstance
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatus
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.ToolProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -163,7 +162,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
       }
 
       conversation
-        .sendMessageAsync(Message.of(contents))
+        .sendMessageAsync(Contents.of(contents))
         .catch {
           Log.e(TAG, "Failed to run inference", it)
           onError(it.message ?: "Unknown error")
@@ -182,11 +181,11 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
 
   fun resetConversation(model: Model, tools: List<ToolProvider>) {
     _isResettingConversation.value = true
-    model.runtimeHelper.resetConversation(
+    LlmChatModelHelper.resetConversation(
       model = model,
       supportImage = false,
       supportAudio = false,
-      systemInstruction = Contents.of(getSystemPrompt()),
+      systemInstruction = getSystemPrompt(),
       tools = tools,
     )
     _isResettingConversation.value = false
@@ -206,10 +205,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         model = model,
         status = ModelInitializationStatus(status = ModelInitializationStatusType.NOT_INITIALIZED),
       )
-      model.runtimeHelper.cleanUp(
+      LlmChatModelHelper.cleanUp(
         model = model,
         onDone = {
-          model.runtimeHelper.initialize(
+          LlmChatModelHelper.initialize(
             context = context,
             model = model,
             supportImage = false,
@@ -224,7 +223,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
                 onError(error)
               }
             },
-            systemInstruction = Contents.of(getSystemPrompt()),
+            systemInstruction = getSystemPrompt(),
             tools = tools,
           )
         },
@@ -234,8 +233,11 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
 
   fun performAction(action: Action, context: Context): String {
     return when (action) {
-      // Flashlight.
-      is FlashlightAction -> setFlashlight(context = context, isEnabled = action.enable)
+      // Flashlight on.
+      is FlashlightOnAction -> setFlashlight(context = context, isEnabled = true)
+
+      // Flashlight off.
+      is FlashlightOffAction -> setFlashlight(context = context, isEnabled = false)
 
       // Create contact.
       is CreateContactAction ->

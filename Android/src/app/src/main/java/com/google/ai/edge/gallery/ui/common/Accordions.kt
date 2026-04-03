@@ -59,6 +59,7 @@ fun Accordions(
   content: @Composable () -> Unit,
 ) {
   Column(modifier = modifier.background(bgColor).padding(8.dp)) {
+    // Title.
     Row(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -101,6 +102,7 @@ fun Accordions(
       }
     }
 
+    // Content.
     AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
       Box(
         modifier = Modifier.padding(start = 4.dp).padding(top = 8.dp),

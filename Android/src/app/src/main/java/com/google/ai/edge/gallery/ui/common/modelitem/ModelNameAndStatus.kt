@@ -16,9 +16,7 @@
 
 package com.google.ai.edge.gallery.ui.common.modelitem
 
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
@@ -44,6 +43,7 @@ import com.google.ai.edge.gallery.data.MODEL_INFO_ICON_SIZE
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDownloadStatus
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
+import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.ClickableLink
 import com.google.ai.edge.gallery.ui.common.humanReadableSize
@@ -63,170 +63,146 @@ import com.google.ai.edge.gallery.ui.theme.labelSmallNarrow
 @Composable
 fun ModelNameAndStatus(
   model: Model,
-  task: Task,
+  task: Task?,
   downloadStatus: ModelDownloadStatus?,
   isExpanded: Boolean,
-  sharedTransitionScope: SharedTransitionScope,
-  animatedVisibilityScope: AnimatedVisibilityScope,
   modifier: Modifier = Modifier,
 ) {
   val inProgress = downloadStatus?.status == ModelDownloadStatusType.IN_PROGRESS
   val isPartiallyDownloaded = downloadStatus?.status == ModelDownloadStatusType.PARTIALLY_DOWNLOADED
   var curDownloadProgress = 0f
 
-  with(sharedTransitionScope) {
-    Column(modifier = modifier) {
-      // Show "best overall" only for the first model if it is indeed the best for this task.
-      if (model.bestForTaskIds.contains(task.id) && task.models[0] == model) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          modifier =
-            Modifier.padding(bottom = 6.dp)
-              .sharedElement(
-                rememberSharedContentState(key = "best_overall"),
-                animatedVisibilityScope = animatedVisibilityScope,
-              ),
-        ) {
-          Icon(
-            Icons.Filled.Star,
-            tint = Color(0xFFFCC934),
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-          )
+  Column(modifier = modifier) {
+    // Show "best overall" only for the first model if it is indeed the best for this task.
+    if (task != null && model.bestForTaskIds.contains(task.id) && task.models[0] == model) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(bottom = 6.dp),
+      ) {
+        Icon(
+          Icons.Filled.Star,
+          tint = Color(0xFFFCC934),
+          contentDescription = null,
+          modifier = Modifier.size(18.dp),
+        )
+        Text(
+          stringResource(R.string.best_overall),
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.alpha(0.6f),
+        )
+      }
+    }
+
+    // Model name and action buttons.
+    Text(
+      model.displayName.ifEmpty { model.name },
+      maxLines = 1,
+      overflow = TextOverflow.MiddleEllipsis,
+      style = MaterialTheme.typography.titleMedium,
+      modifier = Modifier.padding(end = 64.dp),
+    )
+
+    // Status icon + size + download progress details.
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+      // Status icon.
+      StatusIcon(
+        task = task,
+        model = model,
+        downloadStatus = downloadStatus,
+        modifier = Modifier.padding(end = 4.dp),
+      )
+
+      // Failure message.
+      if (
+        downloadStatus != null &&
+          downloadStatus.status == ModelDownloadStatusType.FAILED
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
           Text(
-            stringResource(R.string.best_overall),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.alpha(0.6f),
+            downloadStatus.errorMessage,
+            color = MaterialTheme.colorScheme.error,
+            style = labelSmallNarrow,
+            overflow = TextOverflow.Ellipsis,
           )
         }
       }
 
-      // Model name and action buttons.
-      Text(
-        model.displayName.ifEmpty { model.name },
-        maxLines = 1,
-        overflow = TextOverflow.MiddleEllipsis,
-        style = MaterialTheme.typography.titleMedium,
-        modifier =
-          Modifier.sharedElement(
-            rememberSharedContentState(key = "model_name"),
-            animatedVisibilityScope = animatedVisibilityScope,
-          ),
-      )
+      // Status label
+      else {
+        var sizeLabel = model.totalBytes.humanReadableSize()
+        if (model.localFileRelativeDirPathOverride.isNotEmpty()) {
+          sizeLabel = "{ext_files_dir}/${model.localFileRelativeDirPathOverride}"
+        }
 
-      // Status icon + size + download progress details.
-      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        // Status icon.
-        StatusIcon(
-          task = task,
-          model = model,
-          downloadStatus = downloadStatus,
-          modifier =
-            Modifier.padding(end = 4.dp)
-              .sharedElement(
-                rememberSharedContentState(key = "download_status_icon"),
-                animatedVisibilityScope = animatedVisibilityScope,
-              ),
-        )
+        // Populate the status label.
+        if (downloadStatus != null) {
+          // For in-progress model, show {receivedSize} / {totalSize} - {rate} - {remainingTime}
+          if (inProgress || isPartiallyDownloaded) {
+            var totalSize = downloadStatus.totalBytes
+            if (totalSize == 0L) {
+              totalSize = model.totalBytes
+            }
+            sizeLabel =
+              "${downloadStatus.receivedBytes.humanReadableSize(extraDecimalForGbAndAbove = true)} of ${totalSize.humanReadableSize()}"
+            if (downloadStatus.bytesPerSecond > 0) {
+              sizeLabel = "$sizeLabel · ${downloadStatus.bytesPerSecond.humanReadableSize()} / s"
+              // if (downloadStatus.remainingMs >= 0) {
+              //   sizeLabel =
+              //     "$sizeLabel\n${downloadStatus.remainingMs.formatToHourMinSecond()} left"
+              // }
+            }
+            if (isPartiallyDownloaded) {
+              sizeLabel = "$sizeLabel (resuming...)"
+            }
+            curDownloadProgress =
+              downloadStatus.receivedBytes.toFloat() / downloadStatus.totalBytes.toFloat()
+            if (curDownloadProgress.isNaN()) {
+              curDownloadProgress = 0f
+            }
+          }
+          // Status for unzipping.
+          else if (downloadStatus.status == ModelDownloadStatusType.UNZIPPING) {
+            sizeLabel = "Unzipping..."
+          }
+        }
 
-        // Failure message.
-        if (downloadStatus != null && downloadStatus.status == ModelDownloadStatusType.FAILED) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+          horizontalAlignment = if (isExpanded) Alignment.CenterHorizontally else Alignment.Start
+        ) {
+          for ((index, line) in sizeLabel.split("\n").withIndex()) {
             Text(
-              downloadStatus.errorMessage,
-              color = MaterialTheme.colorScheme.error,
-              style = labelSmallNarrow,
-              overflow = TextOverflow.Ellipsis,
-              modifier =
-                Modifier.sharedElement(
-                  rememberSharedContentState(key = "failure_messsage"),
-                  animatedVisibilityScope = animatedVisibilityScope,
+              line,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              style =
+                MaterialTheme.typography.bodyMedium.copy(
+                  // This stops numbers from "jumping around" when being updated.
+                  fontFeatureSettings = "tnum"
                 ),
+              overflow = TextOverflow.Visible,
+              modifier = Modifier.offset(y = if (index == 0) 0.dp else (-1).dp),
             )
           }
         }
-
-        // Status label
-        else {
-          var sizeLabel = model.totalBytes.humanReadableSize()
-          if (model.localFileRelativeDirPathOverride.isNotEmpty()) {
-            sizeLabel = "{ext_files_dir}/${model.localFileRelativeDirPathOverride}"
-          }
-
-          // Populate the status label.
-          if (downloadStatus != null) {
-            // For in-progress model, show {receivedSize} / {totalSize} - {rate} - {remainingTime}
-            if (inProgress || isPartiallyDownloaded) {
-              var totalSize = downloadStatus.totalBytes
-              if (totalSize == 0L) {
-                totalSize = model.totalBytes
-              }
-              sizeLabel =
-                "${downloadStatus.receivedBytes.humanReadableSize(extraDecimalForGbAndAbove = true)} of ${totalSize.humanReadableSize()}"
-              if (downloadStatus.bytesPerSecond > 0) {
-                sizeLabel = "$sizeLabel · ${downloadStatus.bytesPerSecond.humanReadableSize()} / s"
-                // if (downloadStatus.remainingMs >= 0) {
-                //   sizeLabel =
-                //     "$sizeLabel\n${downloadStatus.remainingMs.formatToHourMinSecond()} left"
-                // }
-              }
-              if (isPartiallyDownloaded) {
-                sizeLabel = "$sizeLabel (resuming...)"
-              }
-              curDownloadProgress =
-                downloadStatus.receivedBytes.toFloat() / downloadStatus.totalBytes.toFloat()
-              if (curDownloadProgress.isNaN()) {
-                curDownloadProgress = 0f
-              }
-            }
-            // Status for unzipping.
-            else if (downloadStatus.status == ModelDownloadStatusType.UNZIPPING) {
-              sizeLabel = "Unzipping..."
-            }
-          }
-
-          Column(
-            horizontalAlignment = if (isExpanded) Alignment.CenterHorizontally else Alignment.Start
-          ) {
-            for ((index, line) in sizeLabel.split("\n").withIndex()) {
-              Text(
-                line,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                style = MaterialTheme.typography.bodyMedium,
-                overflow = TextOverflow.Visible,
-                modifier =
-                  Modifier.offset(y = if (index == 0) 0.dp else (-1).dp)
-                    .sharedElement(
-                      rememberSharedContentState(key = "status_label_${index}"),
-                      animatedVisibilityScope = animatedVisibilityScope,
-                    ),
-              )
-            }
-          }
-        }
       }
+    }
 
-      // Learn more url.
-      if (!model.imported && model.learnMoreUrl.isNotEmpty()) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier =
-            Modifier.sharedElement(
-              rememberSharedContentState(key = "learn_more"),
-              animatedVisibilityScope = animatedVisibilityScope,
-            ),
-        ) {
-          Icon(
-            Icons.AutoMirrored.Outlined.OpenInNew,
-            tint = MaterialTheme.customColors.modelInfoIconColor,
-            contentDescription = null,
-            modifier = Modifier.size(MODEL_INFO_ICON_SIZE).offset(y = 1.dp),
-          )
-          ClickableLink(model.learnMoreUrl, linkText = stringResource(R.string.learn_more))
-        }
+    // Learn more url.
+    if (!model.imported && model.learnMoreUrl.isNotEmpty()) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          Icons.AutoMirrored.Outlined.OpenInNew,
+          tint = MaterialTheme.customColors.modelInfoIconColor,
+          contentDescription = null,
+          modifier = Modifier.size(MODEL_INFO_ICON_SIZE).offset(y = 1.dp),
+        )
+        ClickableLink(
+          model.learnMoreUrl,
+          linkText = stringResource(R.string.learn_more),
+          textAlign = TextAlign.Left,
+        )
       }
     }
   }

@@ -47,9 +47,6 @@ import androidx.core.animation.doOnEnd
 import androidx.core.os.bundleOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
-import android.content.Intent
-import com.google.ai.edge.gallery.service.LlmHttpService
-import com.google.ai.edge.gallery.data.LlmHttpPrefs
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.GalleryTheme
 import com.google.ai.edge.litertlm.ExperimentalApi
@@ -98,20 +95,12 @@ class MainActivity : ComponentActivity() {
       }
 
       @OptIn(ExperimentalApi::class)
-      ExperimentalFlags.enableBenchmark = true
+      ExperimentalFlags.enableBenchmark = false
 
       contentSet = true
     }
 
     modelManagerViewModel.loadModelAllowlist()
-
-    // Start local HTTP bridge only when enabled in Settings.
-    if (LlmHttpPrefs.isEnabled(this)) {
-      val port = LlmHttpPrefs.getPort(this)
-      startService(Intent(this, LlmHttpService::class.java).apply {
-        putExtra(LlmHttpService.EXTRA_PORT, port)
-      })
-    }
 
     // Show splash screen.
     val splashScreen = installSplashScreen()

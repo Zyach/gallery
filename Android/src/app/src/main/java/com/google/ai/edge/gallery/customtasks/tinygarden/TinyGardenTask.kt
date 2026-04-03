@@ -26,7 +26,6 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.runtime.runtimeHelper
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.tool
@@ -107,7 +106,7 @@ class TinyGardenTask @Inject constructor() : CustomTask {
     onDone: (String) -> Unit,
   ) {
     clearQueue()
-    model.runtimeHelper.initialize(
+    LlmChatModelHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
@@ -126,7 +125,7 @@ class TinyGardenTask @Inject constructor() : CustomTask {
     onDone: () -> Unit,
   ) {
     clearQueue()
-    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
+    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable

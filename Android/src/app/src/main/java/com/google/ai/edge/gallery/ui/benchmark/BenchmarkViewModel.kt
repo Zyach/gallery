@@ -27,8 +27,9 @@ import com.google.ai.edge.gallery.proto.LlmBenchmarkBasicInfo
 import com.google.ai.edge.gallery.proto.LlmBenchmarkResult
 import com.google.ai.edge.gallery.proto.LlmBenchmarkStats
 import com.google.ai.edge.gallery.proto.ValueSeries
-import com.google.ai.edge.gallery.runtime.BenchmarkConfig
-import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.benchmark
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -89,6 +90,7 @@ constructor(
     collapseAll()
   }
 
+  @OptIn(ExperimentalApi::class)
   fun runBenchmark(
     model: Model,
     accelerator: String,
@@ -130,31 +132,34 @@ constructor(
         needCleanUpCacheDir = false
       }
       Log.d(TAG, "Using benchmark cache dir: $cacheDirPath")
+      val backend: Backend =
+        when (accelerator.lowercase()) {
+          "gpu" -> Backend.GPU()
+          "npu" -> Backend.NPU(nativeLibraryDir = appContext.applicationInfo.nativeLibraryDir)
+          else -> Backend.CPU()
+        }
+      val modelPath = model.getPath(context = appContext)
       for (i in 0 until runCount) {
         Log.d(TAG, "Start running #$i...")
         val benchmarkInfo =
-          model.runtimeHelper.runBenchmark(
-            context = appContext,
-            model = model,
-            config =
-              BenchmarkConfig(
-                accelerator = accelerator,
-                prefillTokens = prefillTokens,
-                decodeTokens = decodeTokens,
-                cacheDir = cacheDirPath,
-              ),
+          benchmark(
+            modelPath = modelPath,
+            backend = backend,
+            prefillTokens = prefillTokens,
+            decodeTokens = decodeTokens,
+            cacheDir = cacheDirPath,
           )
         Log.d(TAG, "Done #$i")
 
-        val initTimeMs = benchmarkInfo.initTimeMs
+        val initTimeMs = benchmarkInfo.initTimeInSecond * 1000.0
         if (i == 0) {
           firstInitTime = initTimeMs
         } else {
           nonFirstInitTimes.add(initTimeMs)
         }
-        prefillSpeeds.add(benchmarkInfo.prefillTokensPerSecond)
-        decodeSpeeds.add(benchmarkInfo.decodeTokensPerSecond)
-        timesToFirstToken.add(benchmarkInfo.timeToFirstTokenSeconds)
+        prefillSpeeds.add(benchmarkInfo.lastPrefillTokensPerSecond)
+        decodeSpeeds.add(benchmarkInfo.lastDecodeTokensPerSecond)
+        timesToFirstToken.add(benchmarkInfo.timeToFirstTokenInSecond)
 
         // Mark finish for this run.
         setRunProgress(completedRunCount = i + 1)
@@ -216,7 +221,7 @@ constructor(
     _uiState.update { _uiState.value.copy(completedRunCount = completedRunCount) }
   }
 
-  suspend fun addBenchmarkResult(result: BenchmarkResult): String {
+  fun addBenchmarkResult(result: BenchmarkResult): String {
     val newResults = _uiState.value.results.toMutableList()
     // Add the new result to the beginning of the list.
     val newId = "${Random.nextDouble()}"
@@ -255,20 +260,19 @@ constructor(
   }
 
   fun deleteBenchmarkResult(id: String) {
-    viewModelScope.launch {
-      val newResults = _uiState.value.results.toMutableList()
-      val index = newResults.indexOfFirst { it.id == id }
-      if (index != -1) {
-        val deletedResult = newResults.removeAt(index)
-        _uiState.update { _uiState.value.copy(results = newResults) }
-        if (deletedResult.id == uiState.value.baselineResult?.id) {
-          _uiState.update { _uiState.value.copy(baselineResult = null) }
-        }
-
-        dataStoreRepository.setBenchmarkResults(newResults.map { it.benchmarkResult })
-      } else {
-        Log.w(TAG, "Benchmark result with id $id not found.")
+    val newResults = _uiState.value.results.toMutableList()
+    val index = newResults.indexOfFirst { it.id == id }
+    if (index != -1) {
+      val deletedResult = newResults.removeAt(index)
+      _uiState.update { _uiState.value.copy(results = newResults) }
+      if (deletedResult.id == uiState.value.baselineResult?.id) {
+        _uiState.update { _uiState.value.copy(baselineResult = null) }
       }
+
+      // Update storage.
+      dataStoreRepository.deleteBenchmarkResult(index = index)
+    } else {
+      Log.w(TAG, "Benchmark result with id $id not found.")
     }
   }
 

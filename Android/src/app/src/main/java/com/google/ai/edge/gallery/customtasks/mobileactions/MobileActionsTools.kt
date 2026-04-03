@@ -29,7 +29,7 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
     Log.d(TAG, "turn on flashlight")
 
     // Call the callback with the recognized action.
-    onFunctionCalled(FlashlightAction(enable = true))
+    onFunctionCalled(FlashlightOnAction())
 
     // Return a response object to the model confirming the action.
     return mapOf("result" to "success")
@@ -41,7 +41,7 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
     Log.d(TAG, "turn off flashlight")
 
     // Call the callback with the recognized action.
-    onFunctionCalled(FlashlightAction(enable = false))
+    onFunctionCalled(FlashlightOffAction())
 
     // Return a response object to the model confirming the action.
     return mapOf("result" to "success")

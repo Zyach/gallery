@@ -18,7 +18,6 @@ package com.google.ai.edge.gallery.ui.common
 
 import android.content.Intent
 import android.util.Log
-import com.google.ai.edge.gallery.common.ProjectConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,12 +35,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.rounded.Error
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,12 +71,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDownloadStatus
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
+import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.ui.common.tos.GemmaTermsOfUseDialog
+import com.google.ai.edge.gallery.ui.common.tos.TosViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.TokenRequestResultType
 import com.google.ai.edge.gallery.ui.modelmanager.TokenStatus
@@ -118,13 +122,15 @@ private const val SYSTEM_RESERVED_MEMORY_IN_BYTES = 3 * (1L shl 30)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadAndTryButton(
-  task: Task,
+  task: Task?,
   model: Model,
   enabled: Boolean,
   downloadStatus: ModelDownloadStatus?,
   modelManagerViewModel: ModelManagerViewModel,
   onClicked: () -> Unit,
   modifier: Modifier = Modifier,
+  tosViewModel: TosViewModel = hiltViewModel(),
+  modifierWhenExpanded: Modifier = Modifier,
   compact: Boolean = false,
   canShowTryIt: Boolean = true,
 ) {
@@ -133,9 +139,8 @@ fun DownloadAndTryButton(
   var checkingToken by remember { mutableStateOf(false) }
   var showAgreementAckSheet by remember { mutableStateOf(false) }
   var showErrorDialog by remember { mutableStateOf(false) }
-  var showTokenRequiredDialog by remember { mutableStateOf(false) }
-  var authConfigError by remember { mutableStateOf<String?>(null) }
   var showMemoryWarning by remember { mutableStateOf(false) }
+  var showGemmaTermsOfUseDialog by remember { mutableStateOf(false) }
   var downloadStarted by remember { mutableStateOf(false) }
   val sheetState = rememberModalBottomSheetState()
 
@@ -236,16 +241,9 @@ fun DownloadAndTryButton(
 
   // Function to kick off the authentication and token exchange flow.
   val startTokenExchange = {
-    val configError = modelManagerViewModel.validateAuthConfig()
-    if (configError != null) {
-      authConfigError = configError
-      checkingToken = false
-      downloadStarted = false
-    } else {
-      val authRequest = modelManagerViewModel.getAuthorizationRequest()
-      val authIntent = modelManagerViewModel.authService.getAuthorizationRequestIntent(authRequest)
-      authResultLauncher.launch(authIntent)
-    }
+    val authRequest = modelManagerViewModel.getAuthorizationRequest()
+    val authIntent = modelManagerViewModel.authService.getAuthorizationRequestIntent(authRequest)
+    authResultLauncher.launch(authIntent)
   }
 
   // Launches a coroutine to handle the initial check and potential authentication flow
@@ -257,27 +255,6 @@ fun DownloadAndTryButton(
     scope.launch(Dispatchers.IO) {
       if (needToDownloadFirst) {
         downloadStarted = true
-        if (ProjectConfig.skipAuthForHfDownloads) {
-          val tokenStatusAndData = modelManagerViewModel.getTokenStatusAndData()
-          val tokenFromStore =
-            if (tokenStatusAndData.status == TokenStatus.NOT_EXPIRED)
-              tokenStatusAndData.data?.accessToken
-            else null
-
-          val token =
-            tokenFromStore ?: ProjectConfig.hfAccessToken.takeIf { it.isNotBlank() }
-
-          if (token != null) {
-            withContext(Dispatchers.Main) { startDownload(token) }
-          } else {
-            withContext(Dispatchers.Main) {
-              checkingToken = false
-              downloadStarted = false
-              showTokenRequiredDialog = true
-            }
-          }
-          return@launch
-        }
         // For HuggingFace urls
         if (model.url.startsWith("https://huggingface.co")) {
           checkingToken = true
@@ -356,10 +333,18 @@ fun DownloadAndTryButton(
     }
   }
 
+  val checkMemoryAndClickDownloadButton = {
+    if (isMemoryLow(context = context, model = model)) {
+      showMemoryWarning = true
+    } else {
+      handleClickButton()
+    }
+  }
+
   if (!showDownloadProgress) {
     var buttonModifier: Modifier = modifier.height(42.dp)
     if (!compact) {
-      buttonModifier = buttonModifier.fillMaxWidth()
+      buttonModifier = buttonModifier.then(modifierWhenExpanded)
     }
     Button(
       modifier = buttonModifier,
@@ -369,9 +354,14 @@ fun DownloadAndTryButton(
             if (
               (!downloadSucceeded || !canShowTryIt) &&
                 model.localFileRelativeDirPathOverride.isEmpty()
-            )
+            ) {
+
               MaterialTheme.colorScheme.surfaceContainer
-            else getTaskBgGradientColors(task = task)[1]
+            } else if (task != null) {
+              getTaskBgGradientColors(task = task)[1]
+            } else {
+              MaterialTheme.colorScheme.primary
+            }
         ),
       contentPadding = PaddingValues(horizontal = 12.dp),
       onClick = {
@@ -379,24 +369,38 @@ fun DownloadAndTryButton(
           return@Button
         }
 
-        if (isMemoryLow(context = context, model = model)) {
-          showMemoryWarning = true
+        // Check TOS before downloading.
+        if (
+          model.url.startsWith("https://dl.google.com/google-ai-edge-gallery/") &&
+            !tosViewModel.getIsGemmaTermsOfUseAccepted()
+        ) {
+          showGemmaTermsOfUseDialog = true
         } else {
-          handleClickButton()
+          checkMemoryAndClickDownloadButton()
         }
       },
     ) {
       val textColor =
-        if (!downloadSucceeded && model.localFileRelativeDirPathOverride.isEmpty())
+        if (!enabled) {
+          // Define the color for disabled button.
+          MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        } else if (!downloadSucceeded && model.localFileRelativeDirPathOverride.isEmpty()) {
           MaterialTheme.colorScheme.onSurface
-        else Color.White
+        } else if (task != null) {
+          Color.White
+        } else {
+          MaterialTheme.colorScheme.onPrimary
+        }
       Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
         Icon(
-          if (needToDownloadFirst) Icons.Outlined.FileDownload
-          else Icons.AutoMirrored.Rounded.ArrowForward,
+          if (needToDownloadFirst) {
+            Icons.Outlined.FileDownload
+          } else {
+            Icons.AutoMirrored.Rounded.ArrowForward
+          },
           contentDescription = null,
           tint = textColor,
         )
@@ -413,6 +417,9 @@ fun DownloadAndTryButton(
               stringResource(R.string.try_it),
               color = textColor,
               style = MaterialTheme.typography.titleMedium,
+              maxLines = 1,
+              autoSize =
+                TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 16.sp, stepSize = 1.sp),
             )
           }
         }
@@ -450,15 +457,22 @@ fun DownloadAndTryButton(
       } else {
         Text(
           "${(curDownloadProgress * 100).toInt()}%",
-          style = MaterialTheme.typography.bodyMedium,
+          style =
+            MaterialTheme.typography.bodyMedium.copy(
+              // This stops numbers from "jumping around" when being updated.
+              fontFeatureSettings = "tnum"
+            ),
           color = MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.padding(start = 12.dp).width(if (compact) 32.dp else 44.dp),
         )
         if (!compact) {
+          val color =
+            if (task != null) getTaskBgGradientColors(task = task)[1]
+            else MaterialTheme.colorScheme.primary
           LinearProgressIndicator(
             modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
             progress = { animatedProgress.value },
-            color = getTaskBgGradientColors(task = task)[1],
+            color = color,
             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
           )
         }
@@ -466,7 +480,7 @@ fun DownloadAndTryButton(
         IconButton(
           onClick = {
             downloadStarted = false
-            modelManagerViewModel.cancelDownloadModel(task = task, model = model)
+            modelManagerViewModel.cancelDownloadModel(model = model)
           },
           colors =
             IconButtonDefaults.iconButtonColors(
@@ -548,24 +562,6 @@ fun DownloadAndTryButton(
     )
   }
 
-  if (authConfigError != null) {
-    AlertDialog(
-      icon = {
-        Icon(
-          Icons.Rounded.Error,
-          contentDescription = stringResource(R.string.cd_error),
-          tint = MaterialTheme.colorScheme.error,
-        )
-      },
-      title = { Text("Authentication not configured") },
-      text = { Text(authConfigError ?: "") },
-      onDismissRequest = { authConfigError = null },
-      confirmButton = {
-        TextButton(onClick = { authConfigError = null }) { Text("Close") }
-      },
-    )
-  }
-
   if (showMemoryWarning) {
     MemoryWarningAlert(
       onProceeded = {
@@ -576,19 +572,14 @@ fun DownloadAndTryButton(
     )
   }
 
-  if (showTokenRequiredDialog) {
-    AlertDialog(
-      onDismissRequest = { showTokenRequiredDialog = false },
-      icon = { Icon(Icons.Rounded.Info, contentDescription = null) },
-      title = { Text("Token required") },
-      text = {
-        Text(
-          "This model needs a Hugging Face token. Open Settings → enter your token and save, then retry.",
-        )
+  if (showGemmaTermsOfUseDialog) {
+    GemmaTermsOfUseDialog(
+      onTosAccepted = {
+        showGemmaTermsOfUseDialog = false
+        tosViewModel.acceptGemmaTermsOfUse()
+        checkMemoryAndClickDownloadButton()
       },
-      confirmButton = {
-        TextButton(onClick = { showTokenRequiredDialog = false }) { Text("Got it") }
-      },
+      onCancel = { showGemmaTermsOfUseDialog = false },
     )
   }
 }

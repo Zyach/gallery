@@ -27,9 +27,9 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
-import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.ToolProvider
 import com.google.ai.edge.litertlm.tool
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -44,14 +44,14 @@ private const val TAG = "AGMATask"
  */
 class MobileActionsTask @Inject constructor() : CustomTask {
   private var curActions = mutableStateListOf<Action>()
-  private val tools: List<ToolProvider> =
-    listOf(tool(MobileActionsTools(onFunctionCalled = { curActions.add(it) })))
+  private val tools = listOf(tool(MobileActionsTools(onFunctionCalled = { curActions.add(it) })))
 
   override val task =
     Task(
       id = BuiltInTaskId.LLM_MOBILE_ACTIONS,
       label = "Mobile Actions",
       description = "Perform various device actions through Function Gemma",
+      shortDescription = "Leverage device mobile actions",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
         "https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions",
@@ -71,13 +71,13 @@ class MobileActionsTask @Inject constructor() : CustomTask {
     curActions.clear()
 
     // Expected to get the current time on user's device.
-    model.runtimeHelper.initialize(
+    LlmChatModelHelper.initialize(
       context = context,
       model = model,
       supportImage = false,
       supportAudio = false,
       onDone = onDone,
-      systemInstruction = Contents.of(getSystemPrompt()),
+      systemInstruction = getSystemPrompt(),
       tools = tools,
     )
   }
@@ -89,7 +89,7 @@ class MobileActionsTask @Inject constructor() : CustomTask {
     onDone: () -> Unit,
   ) {
     curActions.clear()
-    model.runtimeHelper.cleanUp(model = model, onDone = onDone)
+    LlmChatModelHelper.cleanUp(model = model, onDone = onDone)
   }
 
   @Composable
@@ -107,10 +107,15 @@ class MobileActionsTask @Inject constructor() : CustomTask {
   }
 }
 
-fun getSystemPrompt(): String {
-  @SuppressWarnings("JavaTimeDefaultTimeZone")
-  val curDateTimeString =
-    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-  return "Current date and time given in YYYY-MM-DDTHH:MM:SS format: ${curDateTimeString}. " +
-    "You are a model that can do function calling with the following functions"
+fun getSystemPrompt(): Contents {
+  @SuppressWarnings("JavaTimeDefaultTimeZone") val now = LocalDateTime.now()
+  val curDateTimeString = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+  val dayOfWeekString = now.format(DateTimeFormatter.ofPattern("EEEE"))
+  return Contents.of(
+    listOf(
+        "You are a model that can do function calling with the following functions",
+        "Current date and time given in YYYY-MM-DDTHH:MM:SS format: ${curDateTimeString}\nDay of week is $dayOfWeekString",
+      )
+      .map { Content.Text(it) }
+  )
 }

@@ -48,10 +48,15 @@ message LlmBenchmarkBasicInfo {
 }
 
 message LlmBenchmarkStats {
+  // tokens/sec
   ValueSeries prefill_speed = 1;
+  // tokens/sec
   ValueSeries decode_speed = 2;
+  // seconds
   ValueSeries time_to_first_token = 3;
+  // ms
   double first_init_time_ms = 4;
+  // ms
   ValueSeries non_first_init_time_ms = 5;
 }
 

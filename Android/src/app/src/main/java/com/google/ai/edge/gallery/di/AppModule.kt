@@ -53,6 +53,13 @@ internal object AppModule {
     return SettingsSerializer
   }
 
+  // Provides the CutoutSerializer
+  @Provides
+  @Singleton
+  fun provideCutoutSerializer(): Serializer<CutoutCollection> {
+    return CutoutsSerializer
+  }
+
   // Provides the UserDataSerializer
   @Provides
   @Singleton
@@ -60,12 +67,7 @@ internal object AppModule {
     return UserDataSerializer
   }
 
-  @Provides
-  @Singleton
-  fun provideCutoutsSerializer(): Serializer<CutoutCollection> {
-    return CutoutsSerializer
-  }
-
+  // Provides the BenchmarkResultsSerializer
   @Provides
   @Singleton
   fun provideBenchmarkResultsSerializer(): Serializer<BenchmarkResults> {
@@ -85,6 +87,19 @@ internal object AppModule {
     )
   }
 
+  // Provides DataStore<CutoutCollection>
+  @Provides
+  @Singleton
+  fun provideCutoutsDataStore(
+    @ApplicationContext context: Context,
+    cutoutsSerializer: Serializer<CutoutCollection>,
+  ): DataStore<CutoutCollection> {
+    return DataStoreFactory.create(
+      serializer = cutoutsSerializer,
+      produceFile = { context.dataStoreFile("cutouts.pb") },
+    )
+  }
+
   // Provides DataStore<UserData>
   @Provides
   @Singleton
@@ -98,18 +113,7 @@ internal object AppModule {
     )
   }
 
-  @Provides
-  @Singleton
-  fun provideCutoutDataStore(
-    @ApplicationContext context: Context,
-    cutoutsSerializer: Serializer<CutoutCollection>,
-  ): DataStore<CutoutCollection> {
-    return DataStoreFactory.create(
-      serializer = cutoutsSerializer,
-      produceFile = { context.dataStoreFile("cutouts.pb") },
-    )
-  }
-
+  // Provides DataStore<BenchmarkResults>
   @Provides
   @Singleton
   fun provideBenchmarkResultsDataStore(
@@ -135,14 +139,14 @@ internal object AppModule {
   fun provideDataStoreRepository(
     dataStore: DataStore<Settings>,
     userDataDataStore: DataStore<UserData>,
-    cutoutDataStore: DataStore<CutoutCollection>,
-    benchmarkResultsDataStore: DataStore<BenchmarkResults>,
+    cutoutsDataStore: DataStore<CutoutCollection>,
+    benchmarkResultsStore: DataStore<BenchmarkResults>,
   ): DataStoreRepository {
     return DefaultDataStoreRepository(
       dataStore,
       userDataDataStore,
-      cutoutDataStore,
-      benchmarkResultsDataStore,
+      cutoutsDataStore,
+      benchmarkResultsStore,
     )
   }
 
