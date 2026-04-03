@@ -59,4 +59,52 @@ class LlmHttpResponseRendererTest {
     assertTrue(payload.contains("\"delta\":\"\""))
     assertTrue(payload.contains("event: response.completed"))
   }
+
+  // ── Streaming builder tests ───────────────────────────────────────────────
+
+  @Test
+  fun streamingHeaderContainsOpeningEvents() {
+    val header = LlmHttpResponseRenderer.buildStreamingHeader("my-model", "resp-1", "msg-1", 1000L)
+    assertTrue(header.contains("event: response.created"))
+    assertTrue(header.contains("event: response.in_progress"))
+    assertTrue(header.contains("event: response.output_item.added"))
+    assertTrue(header.contains("event: response.content_part.added"))
+    assertTrue(header.contains("\"model\":\"my-model\""))
+    assertTrue(header.contains("\"id\":\"resp-1\""))
+    assertTrue(header.contains("\"id\":\"msg-1\""))
+  }
+
+  @Test
+  fun streamingHeaderDoesNotContainDeltaOrDone() {
+    val header = LlmHttpResponseRenderer.buildStreamingHeader("m", "r", "g", 1000L)
+    assertTrue(!header.contains("output_text.delta"))
+    assertTrue(!header.contains("response.completed"))
+    assertTrue(!header.contains("[DONE]"))
+  }
+
+  @Test
+  fun textDeltaSseEventFormat() {
+    val event = LlmHttpResponseRenderer.buildTextDeltaSseEvent("msg-42", "hello")
+    assertEquals("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"hello\",\"item_id\":\"msg-42\",\"output_index\":0}\n\n", event)
+  }
+
+  @Test
+  fun streamingFooterContainsClosingEventsAndDone() {
+    val footer = LlmHttpResponseRenderer.buildStreamingFooter("my-model", "resp-1", "msg-1", 1000L, "full text")
+    assertTrue(footer.contains("event: response.output_text.done"))
+    assertTrue(footer.contains("event: response.content_part.done"))
+    assertTrue(footer.contains("event: response.output_item.done"))
+    assertTrue(footer.contains("event: response.completed"))
+    assertTrue(footer.contains("data: [DONE]"))
+    assertTrue(footer.contains("full text"))
+    assertTrue(footer.contains("\"model\":\"my-model\""))
+  }
+
+  @Test
+  fun streamingFooterDoesNotContainOpeningEvents() {
+    val footer = LlmHttpResponseRenderer.buildStreamingFooter("m", "r", "g", 1000L, "")
+    assertTrue(!footer.contains("response.created"))
+    assertTrue(!footer.contains("response.in_progress"))
+    assertTrue(!footer.contains("output_item.added"))
+  }
 }

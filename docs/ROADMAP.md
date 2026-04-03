@@ -8,19 +8,14 @@ Mantener el bridge HTTP local operativo mientras se converge progresivamente con
 
 ## Pendiente
 
-### P1 — Próxima iteración
+### P2 — Próxima iteración
 
-- `ARCH-01` ~~Extraer logging y allowlist loader de `LlmHttpService`~~ **completado**
-- ~~`SYNC-01` Evaluar adopción de Agent Chat / Skills de upstream~~ **cerrado** — upstream v1.0.11 no tiene Agent Chat/Skills
-
-### P2 — Después
-
-- `STREAM-01` SSE streaming real token-by-token
 - `BUILD-02` Release signing propio + minify
 - `THINK-02` Migrar de `<think>` tag parsing a `message.channels["thought"]` nativo
 
 ## Completado
 
+- `STREAM-01` SSE streaming real token-by-token en `/v1/responses` vía `PipedOutputStream` + `executeStreaming()` en `LlmHttpInferenceGateway`
 - `ARCH-01` Extraer `LlmHttpLogger` y `LlmHttpAllowlistLoader` de `LlmHttpService` + tests; mover `GenReq` a ApiModels
 - Upstream sync a v1.0.11 (GlobalModelManager, BenchmarkScreen, SOC/NPU filtering, FCM, agent UI components)
 - Bridge HTTP: loopback, auth Bearer, stateless, SSE, tool calls, JSON errors

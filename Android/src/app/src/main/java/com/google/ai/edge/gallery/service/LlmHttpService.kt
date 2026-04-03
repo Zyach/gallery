@@ -23,6 +23,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.InputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
@@ -247,10 +250,13 @@ class LlmHttpService : Service() {
         return if (req.stream == true) sseResponseToolCall(model.name, toolCall)
         else okJsonText(json.encodeToString(responsesResponseWithToolCall(model.name, toolCall)))
       }
-      val text = runLlm(model, prompt, requestId, "/v1/responses", timeoutSeconds = 90)
-        ?: return badRequest("llm error")
-      return if (req.stream == true) sseResponse(model.name, text)
-      else okJsonText(json.encodeToString(responsesResponseWithText(model.name, text)))
+      return if (req.stream == true) {
+        streamLlm(model, prompt, requestId, "/v1/responses", timeoutSeconds = 90)
+      } else {
+        val text = runLlm(model, prompt, requestId, "/v1/responses", timeoutSeconds = 90)
+          ?: return badRequest("llm error")
+        okJsonText(json.encodeToString(responsesResponseWithText(model.name, text)))
+      }
     }
 
     fun warmUpModel(model: Model) {
@@ -307,6 +313,95 @@ class LlmHttpService : Service() {
       }
     }
 
+    private fun streamLlm(
+      model: Model,
+      prompt: String,
+      requestId: String,
+      endpoint: String,
+      timeoutSeconds: Long = 90,
+    ): Response {
+      synchronized(this) {
+        if (model.instance == null) {
+          var err = ""
+          LlmChatModelHelper.initialize(
+            context = this@LlmHttpService,
+            model = model,
+            supportImage = false,
+            supportAudio = false,
+            onDone = { err = it },
+            systemInstruction = null,
+          )
+          if (err.isNotEmpty()) return jsonError(Response.Status.INTERNAL_ERROR, "model_init_failed")
+        }
+      }
+
+      val now = System.currentTimeMillis() / 1000
+      val respId = "resp-$now"
+      val msgId = "msg-$now"
+      val fullText = StringBuilder()
+      var headerWritten = false
+
+      val pipedOut = PipedOutputStream()
+      val pipedIn = PipedInputStream(pipedOut, 16 * 1024)
+      val writer = pipedOut.writer(Charsets.UTF_8)
+
+      LlmHttpInferenceGateway.executeStreaming(
+        prompt = prompt,
+        timeoutSeconds = timeoutSeconds,
+        executor = executor,
+        inferenceLock = inferenceLock,
+        resetConversation = {
+          LlmChatModelHelper.resetConversation(model, supportImage = false, supportAudio = false, systemInstruction = null)
+        },
+        runInference = { input, onPartial, onError ->
+          LlmChatModelHelper.runInference(
+            model = model,
+            input = input,
+            resultListener = { partial, done, _ -> onPartial(partial, done) },
+            cleanUpListener = {},
+            onError = onError,
+          )
+        },
+        cancelInference = { (model.instance as? LlmModelInstance)?.conversation?.cancelProcess() },
+        elapsedMs = { SystemClock.elapsedRealtime() },
+        onToken = { partial, done ->
+          try {
+            if (!headerWritten) {
+              headerWritten = true
+              writer.write(LlmHttpResponseRenderer.buildStreamingHeader(model.name, respId, msgId, now))
+              writer.flush()
+            }
+            if (partial.isNotEmpty()) {
+              fullText.append(partial)
+              val esc = LlmHttpBridgeUtils.escapeSseText(partial)
+              writer.write(LlmHttpResponseRenderer.buildTextDeltaSseEvent(msgId, esc))
+              writer.flush()
+            }
+            if (done) {
+              val esc = LlmHttpBridgeUtils.escapeSseText(fullText.toString())
+              writer.write(LlmHttpResponseRenderer.buildStreamingFooter(model.name, respId, msgId, now, esc))
+              writer.flush()
+              writer.close()
+              logEvent("request_done id=$requestId endpoint=$endpoint streaming=true outputChars=${fullText.length}")
+            }
+          } catch (e: Exception) {
+            logEvent("request_error id=$requestId endpoint=$endpoint error=pipe_write_failed streaming=true")
+            try { writer.close() } catch (_: Exception) {}
+          }
+        },
+        onError = { error ->
+          logEvent("request_error id=$requestId endpoint=$endpoint error=$error streaming=true")
+          try {
+            writer.write("data: {\"error\":\"$error\"}\n\n")
+            writer.flush()
+            writer.close()
+          } catch (_: Exception) {}
+        },
+      )
+
+      return chunkedSseResponse(pipedIn)
+    }
+
     // ── Response helpers ──────────────────────────────────────────────────────
 
     private fun sseResponse(modelId: String, text: String): Response =
@@ -320,12 +415,15 @@ class LlmHttpService : Service() {
       return if (stream) sseResponse(modelId, "") else okJsonText(json.encodeToString(body))
     }
 
-    private fun chunkedSseResponse(payload: String): Response {
-      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", ByteArrayInputStream(payload.toByteArray(Charsets.UTF_8)))
+    private fun chunkedSseResponse(stream: InputStream): Response {
+      val resp = newChunkedResponse(Response.Status.OK, "text/event-stream", stream)
       resp.addHeader("Cache-Control", "no-cache")
       resp.addHeader("Connection", "keep-alive")
       return resp
     }
+
+    private fun chunkedSseResponse(payload: String): Response =
+      chunkedSseResponse(ByteArrayInputStream(payload.toByteArray(Charsets.UTF_8)))
 
     private fun okJsonText(body: String): Response =
       newFixedLengthResponse(Response.Status.OK, "application/json", body)

@@ -19,6 +19,59 @@ typealias InferenceRunner = (
 
 object LlmHttpInferenceGateway {
 
+  /**
+   * Fires inference on [executor] and delivers tokens via [onToken] as they arrive.
+   * Returns immediately; the caller receives the stream via the [PipedOutputStream] pattern.
+   * [onToken] is called with (partial, false) for each token and (*, true) once when done.
+   * [onError] is called instead of [onToken] if inference fails.
+   */
+  fun executeStreaming(
+    prompt: String,
+    timeoutSeconds: Long = 90,
+    executor: Executor,
+    inferenceLock: Any,
+    resetConversation: () -> Unit,
+    runInference: InferenceRunner,
+    cancelInference: () -> Unit,
+    elapsedMs: () -> Long,
+    onToken: (partial: String, done: Boolean) -> Unit,
+    onError: (error: String) -> Unit,
+  ) {
+    executor.execute {
+      synchronized(inferenceLock) {
+        val latch = CountDownLatch(1)
+        var errorOccurred = false
+        try {
+          resetConversation()
+          runInference(
+            prompt,
+            { partial, done ->
+              onToken(partial, done)
+              if (done) latch.countDown()
+            },
+            { e ->
+              errorOccurred = true
+              onError(e)
+              try { cancelInference() } catch (_: Throwable) {}
+              latch.countDown()
+            },
+          )
+          val completed = latch.await(timeoutSeconds, TimeUnit.SECONDS)
+          if (!completed && !errorOccurred) {
+            onError("timeout")
+            cancelInference()
+            resetConversation()
+          }
+        } catch (t: Throwable) {
+          if (!errorOccurred) {
+            onError(t.message ?: "unknown_error")
+            try { cancelInference() } catch (_: Throwable) {}
+          }
+        }
+      }
+    }
+  }
+
   fun execute(
     prompt: String,
     timeoutSeconds: Long = 30,

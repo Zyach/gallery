@@ -40,6 +40,29 @@ object LlmHttpResponseRenderer {
     }
   }
 
+  // ── Per-token streaming SSE builders ─────────────────────────────────────
+
+  /** Emits the opening events before any delta tokens. */
+  fun buildStreamingHeader(modelId: String, respId: String, msgId: String, now: Long): String = buildString {
+    append(emitSseEvent("response.created", """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""))
+    append(emitSseEvent("response.in_progress", """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""))
+    append(emitSseEvent("response.output_item.added", """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""))
+    append(emitSseEvent("response.content_part.added", """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}"""))
+  }
+
+  /** Emits a single token delta event. [escapedDelta] must already be SSE-safe. */
+  fun buildTextDeltaSseEvent(msgId: String, escapedDelta: String): String =
+    emitSseEvent("response.output_text.delta", """{"type":"response.output_text.delta","content_index":0,"delta":"$escapedDelta","item_id":"$msgId","output_index":0}""")
+
+  /** Emits the closing events after all delta tokens. [escapedFullText] must already be SSE-safe. */
+  fun buildStreamingFooter(modelId: String, respId: String, msgId: String, now: Long, escapedFullText: String): String = buildString {
+    append(emitSseEvent("response.output_text.done", """{"type":"response.output_text.done","content_index":0,"item_id":"$msgId","output_index":0,"text":"$escapedFullText"}"""))
+    append(emitSseEvent("response.content_part.done", """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"$escapedFullText"}}"""))
+    append(emitSseEvent("response.output_item.done", """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"$escapedFullText"}],"role":"assistant"},"output_index":0}"""))
+    append(emitSseEvent("response.completed", """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"$escapedFullText"}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""))
+    append("data: [DONE]\n\n")
+  }
+
   fun buildToolCallSsePayload(modelId: String, toolCallJson: String): String {
     val now = System.currentTimeMillis() / 1000
     val respId = "resp-$now"
