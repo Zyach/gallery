@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStoreFactory
 import com.google.ai.edge.gallery.BenchmarkResultsSerializer
 import com.google.ai.edge.gallery.CutoutsSerializer
 import com.google.ai.edge.gallery.SettingsSerializer
+import com.google.ai.edge.gallery.SkillsSerializer
 import com.google.ai.edge.gallery.UserDataSerializer
 import com.google.ai.edge.gallery.proto.BenchmarkResult
 import com.google.ai.edge.gallery.proto.ImportedModel
@@ -145,6 +146,7 @@ class DataStoreRepositoryTest {
     val userDataPath = basePath.resolve("user-data.pb")
     val cutoutsPath = basePath.resolve("cutouts.pb")
     val benchmarkResultsPath = basePath.resolve("benchmark-results.pb")
+    val skillsPath = basePath.resolve("skills.pb")
 
     return DefaultDataStoreRepository(
       dataStore = DataStoreFactory.create(serializer = SettingsSerializer) { settingsPath.toFile() },
@@ -155,6 +157,8 @@ class DataStoreRepositoryTest {
         DataStoreFactory.create(serializer = BenchmarkResultsSerializer) {
           benchmarkResultsPath.toFile()
         },
+      skillsDataStore =
+        DataStoreFactory.create(serializer = SkillsSerializer) { skillsPath.toFile() },
     )
   }
 }
