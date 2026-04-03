@@ -1,6 +1,6 @@
 package com.google.ai.edge.gallery.data
 
-import kotlinx.serialization.SerializationException
+import com.google.gson.JsonSyntaxException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,7 +70,7 @@ class ModelAllowlistJsonTest {
     assertEquals("Gemma3-1B-IT", allowlist.models.first().name)
   }
 
-  @Test(expected = SerializationException::class)
+  @Test(expected = JsonSyntaxException::class)
   fun rejectsMalformedJson() {
     ModelAllowlistJson.decode("""{"models":[{"name":"broken"}""")
   }

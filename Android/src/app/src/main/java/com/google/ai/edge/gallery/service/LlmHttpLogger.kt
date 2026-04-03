@@ -3,6 +3,7 @@ package com.google.ai.edge.gallery.service
 import java.io.File
 import java.io.FileWriter
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * File-based logger for the HTTP bridge. Writes timestamped lines to llm_http.log,
@@ -35,6 +36,7 @@ class LlmHttpLogger(
 
   fun shutdown() {
     executor.shutdown()
+    executor.awaitTermination(5, TimeUnit.SECONDS)
   }
 
   private fun append(line: String) {
