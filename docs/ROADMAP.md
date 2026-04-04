@@ -1,6 +1,6 @@
 # ROADMAP — gallery fork
 
-> Última actualización: 2026-04-03
+> Última actualización: 2026-04-04
 
 ## Objetivo
 
@@ -8,11 +8,11 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Age
 
 ## Pendiente
 
-- `BUILD-02` Release signing propio + minify
-- `THINK-02` Migrar `<think>` tag parsing a `message.channels["thought"]` (bloqueado — SDK no lo expone)
+- `BUILD-02` Release signing propio + minify (requiere keystore manual)
 
 ## Completado (resumen)
 
+- Thinking via SDK nativo `message.channels["thought"]` (`THINK-02`)
 - Promo banner Gemma 4, AppTitleGm4, modelo de navegación PromoScreen→Home (`SYNC-02c`)
 - AgentChat + Skills importables (WebView, 8 built-in skills, SkillManager) (`SYNC-02b`)
 - Litertlm 0.9.0 → 0.10.0 + versionCode 23 (`SYNC-02a`)
