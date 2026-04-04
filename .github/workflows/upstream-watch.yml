@@ -12,9 +12,6 @@ permissions:
 jobs:
   check-upstream:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
 
     steps:
       - uses: actions/checkout@v4
@@ -53,63 +50,13 @@ jobs:
 
       - name: Analyze with Claude
         if: steps.check.outputs.new == 'true'
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "(ANTHROPIC_API_KEY not configured — add it as a repo secret to enable automatic analysis)" > /tmp/analysis.txt
-            exit 0
-          fi
-
-          COMMITS=$(cat /tmp/commits.txt)
-          STAT=$(cat /tmp/stat.txt)
-
-          python3 - <<'PYEOF'
-          import os, json, urllib.request
-
-          commits = open('/tmp/commits.txt').read()
-          stat = open('/tmp/stat.txt').read()
-
-          prompt = f"""Eres un asistente analizando cambios de upstream google-ai-edge/gallery para mergear en un fork.
-
-El fork añade: HTTP bridge (service/, LlmHttpService.kt), tests en src/test/, docs/, mobile-actions/, tools/ y .github/workflows/jvm-tests.yml. Estos archivos son exclusivos del fork y NO deben sobreescribirse.
-
-Nuevos commits upstream:
-{commits}
-
-Archivos que difieren entre fork HEAD y upstream/main:
-{stat}
-
-Para cada archivo modificado, clasifica:
-- AUTO: se puede hacer checkout directo desde upstream (el fork no tiene contenido propio aquí)
-- MANUAL: requiere merge cuidadoso (tanto upstream como el fork tienen cambios)
-- FORK: archivo exclusivo del fork, ignorar versión upstream
-
-Sé conciso. Máximo 400 palabras."""
-
-          payload = json.dumps({
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 1024,
-            "messages": [{"role": "user", "content": prompt}]
-          }).encode()
-
-          req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=payload,
-            headers={
-              "x-api-key": os.environ["ANTHROPIC_API_KEY"],
-              "anthropic-version": "2023-06-01",
-              "content-type": "application/json",
-            }
-          )
-          resp = json.loads(urllib.request.urlopen(req).read())
-          open('/tmp/analysis.txt', 'w').write(resp["content"][0]["text"])
-          PYEOF
+        run: python3 .github/scripts/analyze_upstream.py > /tmp/analysis.txt
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Ensure upstream-sync label exists
         if: steps.check.outputs.new == 'true'
-        run: |
-          gh label create "upstream-sync" --color "0075ca" --description "Upstream has new changes to review" 2>/dev/null || true
+        run: gh label create "upstream-sync" --color "0075ca" --description "Upstream has new changes to review" 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -139,14 +86,14 @@ Sé conciso. Máximo 400 palabras."""
               `| **último sync registrado** | \`${lastSha}\` |`,
               ``,
               `### Commits nuevos`,
-              `\`\`\``,
+              '```',
               commits || '(sin commits nuevos detectados)',
-              `\`\`\``,
+              '```',
               ``,
               `### Archivos afectados vs fork HEAD`,
-              `\`\`\``,
+              '```',
               stat || '(sin diferencias)',
-              `\`\`\``,
+              '```',
               ``,
               `### Análisis`,
               ``,
