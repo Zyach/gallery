@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Call Claude API to classify upstream diff files as AUTO / MANUAL / FORK."""
+"""Classify upstream diff files as AUTO / MANUAL / FORK using GitHub Models.
+
+Uses the GITHUB_TOKEN already available in every Actions workflow —
+no extra secrets required. Falls back gracefully if the token is missing.
+"""
 import os
 import json
 import sys
 import urllib.request
 import urllib.error
 
-api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-if not api_key:
-    print("(ANTHROPIC_API_KEY not configured — add it as a repo secret to enable automatic analysis)")
+token = os.environ.get("GITHUB_TOKEN", "")
+if not token:
+    print("(GITHUB_TOKEN not available — analysis skipped)")
     sys.exit(0)
 
 commits = open("/tmp/commits.txt").read().strip()
@@ -30,24 +34,23 @@ prompt = (
 )
 
 payload = json.dumps({
-    "model": "claude-haiku-4-5-20251001",
+    "model": "gpt-4o-mini",
     "max_tokens": 1024,
     "messages": [{"role": "user", "content": prompt}],
 }).encode()
 
 req = urllib.request.Request(
-    "https://api.anthropic.com/v1/messages",
+    "https://models.inference.ai.azure.com/chat/completions",
     data=payload,
     headers={
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
+        "Authorization": f"Bearer {token}",
         "content-type": "application/json",
     },
 )
 
 try:
     resp = json.loads(urllib.request.urlopen(req).read())
-    print(resp["content"][0]["text"])
+    print(resp["choices"][0]["message"]["content"])
 except urllib.error.HTTPError as e:
     print(f"API error {e.code}: {e.read().decode()}", file=sys.stderr)
     print("(Analysis unavailable)")

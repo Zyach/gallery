@@ -9,7 +9,6 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Fork ahora 
 ## Pendiente
 
 - `BUILD-02` Release signing propio + minify (requiere keystore manual)
-- Añadir `ANTHROPIC_API_KEY` como repo secret para activar el análisis IA en el workflow de tracking
 
 ## Completado (resumen)
 

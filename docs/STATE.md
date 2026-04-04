@@ -30,10 +30,8 @@ El fork incluye todo el código fuente y assets de upstream v1.0.11:
 
 Workflow diario (09:00 UTC) en `.github/workflows/upstream-watch.yml`:
 - Compara `upstream/main` contra `.upstream-sha`
-- Si hay cambios: abre issue con commits, stat y análisis AUTO/MANUAL/FORK vía Claude Haiku
+- Si hay cambios: abre issue con commits, stat y análisis AUTO/MANUAL/FORK vía GitHub Models (gpt-4o-mini, sin secrets adicionales)
 - Actualiza `.upstream-sha` en main automáticamente
-
-Para activar el análisis IA: añadir `ANTHROPIC_API_KEY` como repo secret.
 
 ## Gaps activos
 

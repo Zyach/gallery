@@ -48,11 +48,11 @@ jobs:
           fi
           git diff HEAD upstream/main --stat > /tmp/stat.txt
 
-      - name: Analyze with Claude
+      - name: Analyze with GitHub Models
         if: steps.check.outputs.new == 'true'
         run: python3 .github/scripts/analyze_upstream.py > /tmp/analysis.txt
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Ensure upstream-sync label exists
         if: steps.check.outputs.new == 'true'
