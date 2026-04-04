@@ -2,9 +2,9 @@
 
 > Última actualización: 2026-04-04
 
-**Base:** upstream v1.0.11 · **Tests:** 89 JVM · **CI:** verde
+**Base:** upstream v1.0.11 · **Paridad con upstream:** completa · **Tests:** 89 JVM · **CI:** verde
 
-## Capacidades (fork añade)
+## Capacidades exclusivas del fork
 
 | Qué | Dónde |
 |---|---|
@@ -14,8 +14,17 @@
 | `DataStoreRepository` sin `runBlocking` | `data/DataStoreRepository.kt` |
 | Errores visibles en single-turn; reset de sesión con max retries | `ui/llmchat/`, `ui/llmsingleturn/` |
 | Thinking via SDK nativo (`message.channels["thought"]`) | `LlmChatModelHelper.kt` |
-| Agent Chat + Skills importables (WebView, built-in skills) | `customtasks/agentchat/` |
-| Promo banner Gemma 4 (PromoScreenGm4 → HomeScreen con gm4=true) | `ui/home/`, `ui/modelmanager/` |
+
+## Adoptado de upstream (completo)
+
+El fork incluye todo el código fuente y assets de upstream v1.0.11:
+
+- Agent Chat + Skills importables (WebView, 8 built-in skills, SkillManager) — `customtasks/agentchat/`
+- Promo banner Gemma 4, HomeScreen `gm4=true`, AppTitleGm4, RevealingText — `ui/home/`, `ui/modelmanager/`
+- Skills button wired ChatPanel→MessageInputText, loading screen en primer init — SYNC-03
+- litertlm 0.10.0, versionCode 23
+- Assets multimedia skills: 88 MP3 (virtual-piano), HTML/JS (built-in + featured)
+- `model_allowlists/1_0_11.json`, `.github/DISCUSSION_TEMPLATE/skills.yml`, `static.yml` CI
 
 ## Gaps activos
 

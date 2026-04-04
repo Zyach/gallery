@@ -4,7 +4,7 @@
 
 ## Objetivo
 
-Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Agent Chat/Skills cuando el bridge y runtime estén estables.
+Mantener el bridge HTTP operativo mientras se converge con upstream. Fork ahora a paridad completa con upstream v1.0.11.
 
 ## Pendiente
 
@@ -12,6 +12,7 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Age
 
 ## Completado (resumen)
 
+- Paridad completa: assets multimedia y archivos secundarios de upstream (88 MP3, HTML/JS skills, model_allowlists)
 - Skills button wired ChatPanel→MessageInputText, init loading screen, upstream flag refactors (`SYNC-03`)
 - Thinking via SDK nativo `message.channels["thought"]` (`THINK-02`)
 - Promo banner Gemma 4, AppTitleGm4, modelo de navegación PromoScreen→Home (`SYNC-02c`)
