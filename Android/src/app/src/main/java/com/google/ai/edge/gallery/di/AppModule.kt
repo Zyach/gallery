@@ -76,6 +76,13 @@ internal object AppModule {
     return BenchmarkResultsSerializer
   }
 
+  // Provides the SkillsSerializer
+  @Provides
+  @Singleton
+  fun provideSkillsSerializer(): Serializer<Skills> {
+    return SkillsSerializer
+  }
+
   // Provides DataStore<Settings>
   @Provides
   @Singleton
@@ -126,13 +133,6 @@ internal object AppModule {
       serializer = benchmarkResultsSerializer,
       produceFile = { context.dataStoreFile("benchmark_results.pb") },
     )
-  }
-
-  // Provides the SkillsSerializer
-  @Provides
-  @Singleton
-  fun provideSkillsSerializer(): Serializer<Skills> {
-    return SkillsSerializer
   }
 
   // Provides DataStore<Skills>

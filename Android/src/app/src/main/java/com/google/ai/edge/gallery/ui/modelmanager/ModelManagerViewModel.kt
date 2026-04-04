@@ -216,9 +216,7 @@ constructor(
   }
 
   fun getActiveCustomTasks(): List<CustomTask> {
-    return customTasks.filter {
-      true
-    }
+    return customTasks.toList()
   }
 
   fun getSelectedModel(): Model? {
