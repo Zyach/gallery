@@ -9,9 +9,13 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Fork ahora 
 ## Pendiente
 
 - `BUILD-02` Release signing propio + minify (requiere keystore manual)
+- Añadir `ANTHROPIC_API_KEY` como repo secret para activar el análisis IA en el workflow de tracking
 
 ## Completado (resumen)
 
+## Completado (resumen)
+
+- Workflow de tracking upstream con análisis Claude Haiku (`upstream-watch.yml`, `.upstream-sha`, `.github/scripts/analyze_upstream.py`)
 - Fix CI: `MAX_RECOMMENDED_SKILL_COUNT` en Consts.kt, AppModule.kt ordering, eliminar `ThinkingTagAccumulator` (dead code), `customTasks.toList()` en ModelManagerViewModel
 - Paridad completa: assets multimedia y archivos secundarios de upstream (88 MP3, HTML/JS skills, model_allowlists)
 - Skills button wired ChatPanel→MessageInputText, init loading screen, upstream flag refactors (`SYNC-03`)

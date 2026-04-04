@@ -26,6 +26,15 @@ El fork incluye todo el código fuente y assets de upstream v1.0.11:
 - Assets multimedia skills: 88 MP3 (virtual-piano), HTML/JS (built-in + featured)
 - `model_allowlists/1_0_11.json`, `.github/DISCUSSION_TEMPLATE/skills.yml`, `static.yml` CI
 
+## Tracking automático de upstream
+
+Workflow diario (09:00 UTC) en `.github/workflows/upstream-watch.yml`:
+- Compara `upstream/main` contra `.upstream-sha`
+- Si hay cambios: abre issue con commits, stat y análisis AUTO/MANUAL/FORK vía Claude Haiku
+- Actualiza `.upstream-sha` en main automáticamente
+
+Para activar el análisis IA: añadir `ANTHROPIC_API_KEY` como repo secret.
+
 ## Gaps activos
 
 | ID | Descripción |
