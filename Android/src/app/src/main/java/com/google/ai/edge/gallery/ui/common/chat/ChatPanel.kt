@@ -23,6 +23,8 @@ import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +53,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -77,8 +80,11 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Model
@@ -86,6 +92,7 @@ import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.AudioAnimation
 import com.google.ai.edge.gallery.ui.common.ErrorDialog
 import com.google.ai.edge.gallery.ui.common.FloatingBanner
+import com.google.ai.edge.gallery.ui.common.RotationalLoader
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.theme.customColors
@@ -108,6 +115,7 @@ fun ChatPanel(
   onStreamImageMessage: (Model, ChatMessageImage) -> Unit = { _, _ -> },
   onStreamEnd: (Int) -> Unit = {},
   onStopButtonClicked: () -> Unit = {},
+  onSkillClicked: () -> Unit = {},
   onImageSelected: (bitmaps: List<Bitmap>, selectedBitmapIndex: Int) -> Unit = { _, _ -> },
   showStopButtonInInputWhenInProgress: Boolean = false,
   showImagePicker: Boolean = false,
@@ -481,6 +489,44 @@ fun ChatPanel(
         if (messages.isEmpty() && pickedImagesCount == 0 && pickedAudioClipsCount == 0) {
           emptyStateComposable(selectedModel)
         }
+        // Loading screen when model is initialized for that first time.
+        val isFirstInitializing =
+          modelInitializationStatus?.status == ModelInitializationStatusType.INITIALIZING &&
+            modelInitializationStatus.isFirstInitialization(selectedModel)
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.Center,
+        ) {
+          AnimatedVisibility(
+            isFirstInitializing,
+            enter = fadeIn() + scaleIn(initialScale = 0.9f),
+            exit = fadeOut() + scaleOut(targetScale = 0.9f),
+          ) {
+            Box(modifier = Modifier.background(MaterialTheme.colorScheme.surface).fillMaxSize()) {
+              Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                RotationalLoader(size = 32.dp)
+                Text(
+                  stringResource(R.string.aichat_initializing_title),
+                  style =
+                    MaterialTheme.typography.headlineLarge.copy(
+                      fontSize = 24.sp,
+                      fontWeight = FontWeight.Bold,
+                    ),
+                )
+                Text(
+                  stringResource(R.string.aichat_initializing_content),
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  textAlign = TextAlign.Center,
+                )
+              }
+            }
+          }
+        }
       }
 
       MessageInputText(
@@ -521,9 +567,11 @@ fun ChatPanel(
           }
         },
         onAmplitudeChanged = { curAmplitude = it },
+        onSkillsClicked = onSkillClicked,
         onPickedImagesChanged = { pickedImagesCount = it.size },
         onPickedAudioClipsChanged = { pickedAudioClipsCount = it.size },
         showPromptTemplatesInMenu = false,
+        showSkillsPicker = task.id === BuiltInTaskId.LLM_AGENT_CHAT,
         showImagePicker = selectedModel.llmSupportImage && showImagePicker,
         showAudioPicker = selectedModel.llmSupportAudio && showAudioPicker,
         showStopButtonWhenInProgress = showStopButtonInInputWhenInProgress,
