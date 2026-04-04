@@ -10,7 +10,7 @@ El fork está a **paridad completa** con upstream v1.0.11 en código fuente y as
 | Capacidad | Archivos clave |
 |---|---|
 | HTTP bridge en `127.0.0.1:9006` — API compatible OpenAI, auth Bearer, SSE real token-by-token, tool calls | `service/` (12 archivos) |
-| 89 tests JVM | `src/test/` (16 archivos) |
+| 88 tests JVM | `src/test/` (15 archivos) |
 | CI: tests + lint + APK artifacts | `.github/workflows/jvm-tests.yml` |
 | `DataStoreRepository` sin `runBlocking` | `data/DataStoreRepository.kt` |
 | Error visible en single-turn | `ui/llmsingleturn/LlmSingleTurnViewModel.kt` |
@@ -24,4 +24,4 @@ El fork está a **paridad completa** con upstream v1.0.11 en código fuente y as
 
 - El **bridge HTTP** es la razón principal del fork. Siempre se preserva.
 - El **chat history persistente** no se reintroduce.
-- **Thinking** usa `message.channels["thought"]` del SDK nativo desde litertlm 0.10.0. `ThinkingTagAccumulator.kt` se mantiene únicamente por compatibilidad con tests existentes.
+- **Thinking** usa `message.channels["thought"]` del SDK nativo desde litertlm 0.10.0. `ThinkingTagAccumulator.kt` eliminado (no tenía callers en producción).

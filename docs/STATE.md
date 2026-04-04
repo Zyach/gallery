@@ -2,14 +2,14 @@
 
 > Última actualización: 2026-04-04
 
-**Base:** upstream v1.0.11 · **Paridad con upstream:** completa · **Tests:** 89 JVM · **CI:** verde
+**Base:** upstream v1.0.11 · **Paridad con upstream:** completa · **Tests:** 88 JVM · **CI:** verde
 
 ## Capacidades exclusivas del fork
 
 | Qué | Dónde |
 |---|---|
 | HTTP bridge — API compatible OpenAI, auth Bearer, SSE real, tool calls | `service/` (12 archivos) |
-| 89 tests JVM unitarios | `src/test/` (16 archivos) |
+| 88 tests JVM unitarios | `src/test/` (15 archivos) |
 | CI: tests + lint + APK artifacts | `.github/workflows/` |
 | `DataStoreRepository` sin `runBlocking` | `data/DataStoreRepository.kt` |
 | Errores visibles en single-turn; reset de sesión con max retries | `ui/llmchat/`, `ui/llmsingleturn/` |

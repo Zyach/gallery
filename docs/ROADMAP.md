@@ -12,6 +12,7 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Fork ahora 
 
 ## Completado (resumen)
 
+- Fix CI: `MAX_RECOMMENDED_SKILL_COUNT` en Consts.kt, AppModule.kt ordering, eliminar `ThinkingTagAccumulator` (dead code), `customTasks.toList()` en ModelManagerViewModel
 - Paridad completa: assets multimedia y archivos secundarios de upstream (88 MP3, HTML/JS skills, model_allowlists)
 - Skills button wired ChatPanel→MessageInputText, init loading screen, upstream flag refactors (`SYNC-03`)
 - Thinking via SDK nativo `message.channels["thought"]` (`THINK-02`)
