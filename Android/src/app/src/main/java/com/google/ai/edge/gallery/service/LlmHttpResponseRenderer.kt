@@ -63,19 +63,22 @@ object LlmHttpResponseRenderer {
     append("data: [DONE]\n\n")
   }
 
-  fun buildToolCallSsePayload(modelId: String, toolCallJson: String): String {
+  fun buildToolCallSsePayload(modelId: String, toolCall: ToolCall): String {
     val now = System.currentTimeMillis() / 1000
     val respId = "resp-$now"
-    val msgId = "msg-$now"
+    val fcId = "fc-$now"
+    val callId = toolCall.id
+    val name = toolCall.function.name
+    val escapedArgs = LlmHttpBridgeUtils.escapeSseText(toolCall.function.arguments)
 
     return buildString {
       append(emitSseEvent("response.created", """{"type":"response.created","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""))
       append(emitSseEvent("response.in_progress", """{"type":"response.in_progress","response":{"id":"$respId","object":"response","created_at":$now,"status":"in_progress","model":"$modelId","output":[]}}"""))
-      append(emitSseEvent("response.output_item.added", """{"type":"response.output_item.added","item":{"id":"$msgId","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":0}"""))
-      append(emitSseEvent("response.content_part.added", """{"type":"response.content_part.added","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_tool_call","tool_call":$toolCallJson}}"""))
-      append(emitSseEvent("response.content_part.done", """{"type":"response.content_part.done","content_index":0,"item_id":"$msgId","output_index":0,"part":{"type":"output_tool_call","tool_call":$toolCallJson}}"""))
-      append(emitSseEvent("response.output_item.done", """{"type":"response.output_item.done","item":{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_tool_call","tool_call":$toolCallJson}],"role":"assistant"},"output_index":0}"""))
-      append(emitSseEvent("response.completed", """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"id":"$msgId","type":"message","status":"completed","content":[{"type":"output_tool_call","tool_call":$toolCallJson}],"role":"assistant"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""))
+      append(emitSseEvent("response.output_item.added", """{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"$fcId","call_id":"$callId","name":"$name","arguments":"","status":"in_progress"}}"""))
+      append(emitSseEvent("response.function_call_arguments.delta", """{"type":"response.function_call_arguments.delta","output_index":0,"item_id":"$fcId","call_id":"$callId","delta":"$escapedArgs"}"""))
+      append(emitSseEvent("response.function_call_arguments.done", """{"type":"response.function_call_arguments.done","output_index":0,"item_id":"$fcId","call_id":"$callId","arguments":"$escapedArgs"}"""))
+      append(emitSseEvent("response.output_item.done", """{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"$fcId","call_id":"$callId","name":"$name","arguments":"$escapedArgs","status":"completed"}}"""))
+      append(emitSseEvent("response.completed", """{"type":"response.completed","response":{"id":"$respId","object":"response","created_at":$now,"status":"completed","model":"$modelId","output":[{"type":"function_call","id":"$fcId","call_id":"$callId","name":"$name","arguments":"$escapedArgs","status":"completed"}],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}"""))
       append("data: [DONE]\n\n")
     }
   }

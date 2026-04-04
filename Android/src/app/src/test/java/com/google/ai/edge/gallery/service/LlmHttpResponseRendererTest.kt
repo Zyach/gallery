@@ -45,10 +45,12 @@ class LlmHttpResponseRendererTest {
 
   @Test
   fun toolCallSsePayloadContainsToolJson() {
-    val toolJson = """{"id":"call-1","type":"function","function":{"name":"test","arguments":"{}"}}"""
-    val payload = LlmHttpResponseRenderer.buildToolCallSsePayload("m", toolJson)
-    assertTrue(payload.contains("output_tool_call"))
-    assertTrue(payload.contains(toolJson))
+    val toolCall = ToolCall(id = "call-1", function = ToolCallFunction(name = "test", arguments = "{}"))
+    val payload = LlmHttpResponseRenderer.buildToolCallSsePayload("m", toolCall)
+    assertTrue(payload.contains("event: response.function_call_arguments.delta"))
+    assertTrue(payload.contains("event: response.function_call_arguments.done"))
+    assertTrue(payload.contains("\"call_id\":\"call-1\""))
+    assertTrue(payload.contains("\"name\":\"test\""))
     assertTrue(payload.contains("event: response.completed"))
     assertTrue(payload.contains("data: [DONE]"))
   }

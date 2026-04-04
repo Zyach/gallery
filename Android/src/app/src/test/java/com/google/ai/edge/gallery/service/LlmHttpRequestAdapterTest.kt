@@ -5,9 +5,28 @@ import org.junit.Test
 
 class LlmHttpRequestAdapterTest {
   @Test
-  fun extractLatestUserTextPrefersLastTextBlockOfLastUserMessage() {
+  fun buildConversationPromptSingleTurnReturnsPlainText() {
     val prompt =
-      LlmHttpRequestAdapter.extractLatestUserText(
+      LlmHttpRequestAdapter.buildConversationPrompt(
+        listOf(
+          InputMsg(
+            role = "user",
+            content =
+              listOf(
+                InputContent(type = "input_text", text = "keep me"),
+                InputContent(type = "text", text = "final"),
+              ),
+          ),
+        )
+      )
+
+    assertEquals("keep me final", prompt)
+  }
+
+  @Test
+  fun buildConversationPromptMultiTurnFormatsHistory() {
+    val prompt =
+      LlmHttpRequestAdapter.buildConversationPrompt(
         listOf(
           InputMsg(
             role = "user",
@@ -28,7 +47,7 @@ class LlmHttpRequestAdapterTest {
         )
       )
 
-    assertEquals("final", prompt)
+    assertEquals("User: first\n\nAssistant: ignore\n\nUser: keep me final", prompt)
   }
 
   @Test

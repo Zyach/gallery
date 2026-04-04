@@ -8,18 +8,34 @@ import kotlinx.serialization.json.JsonPrimitive
 object LlmHttpRequestAdapter {
   private val json = Json { ignoreUnknownKeys = true }
 
-  fun extractLatestUserText(msgs: List<InputMsg>?): String {
+  /**
+   * Builds a prompt from a Responses API message list.
+   * A single-message list returns the text without role decoration (backward-compatible).
+   * Multi-turn lists are formatted as "Role: text" paragraphs so the model sees the
+   * full conversation history instead of just the last user turn.
+   */
+  fun buildConversationPrompt(msgs: List<InputMsg>?): String {
     if (msgs == null) return ""
-    var lastUserText: String? = null
-    msgs.forEach { message ->
-      if (message.role.equals("user", ignoreCase = true)) {
-        val lastBlock = message.content.lastOrNull { it.type == "text" || it.type == "input_text" }
-        if (lastBlock != null) {
-          lastUserText = lastBlock.text
-        }
+    if (msgs.size == 1) return extractTextFromMsg(msgs.first())
+    return msgs
+      .mapNotNull { msg ->
+        val text = extractTextFromMsg(msg)
+        if (text.isBlank()) null else "${formatRole(msg.role)}: $text"
       }
-    }
-    return lastUserText.orEmpty()
+      .joinToString("\n\n")
+  }
+
+  /**
+   * Builds a prompt from a Chat Completions message list.
+   * A single-message list returns the content directly.
+   * Multi-turn lists are formatted as "Role: content" paragraphs.
+   */
+  fun buildChatPrompt(msgs: List<ChatMessage>): String {
+    if (msgs.isEmpty()) return ""
+    if (msgs.size == 1) return msgs.first().content
+    return msgs
+      .filter { it.content.isNotBlank() }
+      .joinToString("\n\n") { "${formatRole(it.role)}: ${it.content}" }
   }
 
   fun synthesizeToolCall(tool: ToolSpec, prompt: String, callId: String): ToolCall {
@@ -31,5 +47,18 @@ object LlmHttpRequestAdapter {
         arguments = json.encodeToString(argsObj),
       ),
     )
+  }
+
+  private fun extractTextFromMsg(msg: InputMsg): String =
+    msg.content
+      .filter { it.type == "text" || it.type == "input_text" || it.type == "output_text" }
+      .joinToString(" ") { it.text }
+      .trim()
+
+  private fun formatRole(role: String): String = when (role.lowercase()) {
+    "user" -> "User"
+    "assistant" -> "Assistant"
+    "system", "developer" -> "System"
+    else -> role.replaceFirstChar { it.uppercase() }
   }
 }

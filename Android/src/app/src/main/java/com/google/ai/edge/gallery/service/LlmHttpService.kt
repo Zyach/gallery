@@ -201,7 +201,7 @@ class LlmHttpService : Service() {
       val req = json.decodeFromString<ChatRequest>(parsed.body)
       if (req.tools.isNullOrEmpty() && req.tool_choice == "required")
         return badRequest("tool_choice required but tools empty")
-      val prompt = req.messages.joinToString("\n") { it.content }
+      val prompt = LlmHttpRequestAdapter.buildChatPrompt(req.messages)
       logPayload("POST /v1/chat/completions prompt", prompt, requestId)
       val requestedId = LlmHttpBridgeUtils.resolveRequestedModelId(req.model)
       val model = selectModel(req.model) ?: return notFound("model_not_found")
@@ -237,7 +237,7 @@ class LlmHttpService : Service() {
         return badRequest("tool_choice required but tools empty")
       val requestedId = LlmHttpBridgeUtils.resolveRequestedModelId(req.model)
       val model = selectModel(req.model) ?: return notFound("model_not_found")
-      val prompt = LlmHttpRequestAdapter.extractLatestUserText(req.messages ?: req.input)
+      val prompt = LlmHttpRequestAdapter.buildConversationPrompt(req.messages ?: req.input)
       logPayload("POST /v1/responses prompt", prompt, requestId)
       logEvent("request_start id=$requestId endpoint=/v1/responses bodyBytes=${parsed.bodyBytes} promptChars=${prompt.length} model=$requestedId resolved=${model.name}")
 
@@ -408,7 +408,7 @@ class LlmHttpService : Service() {
       chunkedSseResponse(LlmHttpResponseRenderer.buildTextSsePayload(modelId, text))
 
     private fun sseResponseToolCall(modelId: String, toolCall: ToolCall): Response =
-      chunkedSseResponse(LlmHttpResponseRenderer.buildToolCallSsePayload(modelId, json.encodeToString(toolCall)))
+      chunkedSseResponse(LlmHttpResponseRenderer.buildToolCallSsePayload(modelId, toolCall))
 
     private fun emptyResponse(modelId: String, stream: Boolean): Response {
       val body = responsesResponseWithText(modelId, "")
