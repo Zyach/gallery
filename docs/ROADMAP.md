@@ -12,6 +12,7 @@ Mantener el bridge HTTP operativo mientras se converge con upstream. Adoptar Age
 
 ## Completado (resumen)
 
+- Skills button wired ChatPanel→MessageInputText, init loading screen, upstream flag refactors (`SYNC-03`)
 - Thinking via SDK nativo `message.channels["thought"]` (`THINK-02`)
 - Promo banner Gemma 4, AppTitleGm4, modelo de navegación PromoScreen→Home (`SYNC-02c`)
 - AgentChat + Skills importables (WebView, 8 built-in skills, SkillManager) (`SYNC-02b`)
